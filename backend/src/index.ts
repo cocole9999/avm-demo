@@ -1,5 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import {
+  initSentry, sentryErrorHandler, setupSentryExpressHandlers,
+  captureException, setUser,
+} from './utils/sentry';
+import { alertOnServerError } from './services/alertEngine';
 import { workItemRouter } from './routes/workItems';
 import { iterationRouter } from './routes/iterations';
 import { commentRouter } from './routes/comments';
@@ -51,6 +56,11 @@ import http from 'http';
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+// V1.30.3 P2-8: Sentry 错误追踪（必须最早初始化）
+initSentry();
+// Sentry v10: requestData / tracing 由默认集成自动处理，无需独立 handler
+setupSentryExpressHandlers(app);
 
 // V1.30 安全: 安全头 + 限流 (必须在 cors/parser 之前)
 app.use(helmetMiddleware);
@@ -128,14 +138,24 @@ app.use('/api/audit-logs', auditLogRouter);
 app.use('/api/mentions', mentionRouter);
 app.use('/api/uploads', uploadRouter);
 
+// V1.30.3 P2-8: Sentry error handler（在自定义错误处理之前）
+app.use(sentryErrorHandler());
+
 // V1.30.3 P1: 全局错误处理 — 生产环境不泄露内部信息
 app.use((err: any, _req: any, res: any, _next: any) => {
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
+  // 5xx 上报 Sentry
+  const status = err.status || 500;
+  if (status >= 500) {
+    captureException(err, { url: _req?.originalUrl, method: _req?.method });
+    // V1.30.3 P2-9: 系统告警通道（5xx 自动触发）
+    alertOnServerError(err, { url: _req?.originalUrl, method: _req?.method, userId: _req?.user?.id });
+  }
   const isProd = process.env.NODE_ENV === 'production';
   if (err.status === 400 || err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: '请求体格式错误' });
   }
-  res.status(err.status || 500).json({
+  res.status(status).json({
     error: isProd
       ? '服务器内部错误, 请联系管理员'
       : (err.message || 'Internal Server Error'),

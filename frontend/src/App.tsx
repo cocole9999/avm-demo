@@ -322,7 +322,7 @@ export default function App() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light" width={232}>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light" width={232} aria-label="主导航侧边栏" role="navigation">
         <div style={{
           height: 56, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           borderBottom: `1px solid ${themeToken.colorBorderSecondary}`,
@@ -452,7 +452,7 @@ export default function App() {
           padding: '0 24px', background: '#fff',
           borderBottom: `1px solid ${themeToken.colorBorderSecondary}`,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
+        }} role="banner" aria-label="顶部导航栏">
           <Space>
             <div style={{ fontSize: 16, fontWeight: 500 }}>{getTitle()}</div>
             {currentSpace && (
@@ -550,7 +550,7 @@ export default function App() {
           </Space>
         </Header>
 
-        <Content style={{ margin: 16 }}>
+        <Content style={{ margin: 16 }} role="main" aria-label="主要内容区域">
           <Outlet />
         </Content>
       </Layout>

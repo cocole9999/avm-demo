@@ -18,6 +18,7 @@
  */
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db';
+import { setUser } from '../utils/sentry';
 
 export type Role = 'member' | 'space_admin' | 'tenant_admin';
 const ROLE_LEVEL: Record<Role, number> = {
@@ -88,6 +89,8 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
         id: user.id, username: user.username, displayName: user.displayName,
         role: (user.role as Role) || 'member', department: user.department,
       };
+      // V1.30.3 P2-8: 同步用户到 Sentry
+      setUser({ id: user.id, username: user.username, role: user.role || 'member' });
       return next();
     }
     return res.status(401).json({ error: '无效或过期的 token' });

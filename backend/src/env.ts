@@ -33,4 +33,9 @@ export const env = {
   // V1.30.1 P2-1: 敏感字段加密 (32 字节 base64, 不配置则用明文兼容旧数据)
   // 生成: tsx -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
   API_KEY_ENCRYPTION_KEY: get('API_KEY_ENCRYPTION_KEY', ''),
+  // V1.30.3 P2-8: Sentry 错误追踪（不配置 DSN 则禁用）
+  SENTRY_DSN: get('SENTRY_DSN', ''),
+  SENTRY_ENABLED: get('SENTRY_ENABLED', 'true'),
+  SENTRY_ENVIRONMENT: get('SENTRY_ENVIRONMENT', ''),
+  SENTRY_TRACES_SAMPLE_RATE: get('SENTRY_TRACES_SAMPLE_RATE', '0.05'),
 };

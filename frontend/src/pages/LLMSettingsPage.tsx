@@ -54,8 +54,8 @@ export function LLMSettingsPage() {
     setLoading(true);
     try {
       const r = await llmSettingsApi.list();
-      setProviders(r.providers);
-      setSettings(r.settings);
+      setProviders(r.providers as unknown as Provider[]);
+      setSettings(r.settings as unknown as Setting[]);
       setStatus(r.status);
     } catch (e: any) { message.error(e.message); }
     finally { setLoading(false); }
@@ -323,6 +323,7 @@ export function LLMSettingsPage() {
 
 // 模型管理子组件
 function ModelsEditor({ provider }: { provider: string }) {
+  const { message } = App.useApp();
   const [models, setModels] = useState<{ builtin: string[]; custom: string[]; current: string; all: string[] }>({ builtin: [], custom: [], current: '', all: [] });
   const [newModel, setNewModel] = useState('');
 

@@ -288,12 +288,12 @@ function KanbanCard({ item, dragging, onClickItem }: { item: WorkItem; dragging?
         <Space size={4}>
           {item.assignee ? (
             <Tooltip title={item.assignee}>
-              <Avatar size="20" style={{ background: '#1677ff', fontSize: 11 }}>
+              <Avatar size={20} style={{ background: '#1677ff', fontSize: 11 }}>
                 {item.assignee[0]}
               </Avatar>
             </Tooltip>
           ) : (
-            <Avatar size="20" style={{ background: '#ccc' }}>?</Avatar>
+            <Avatar size={20} style={{ background: '#ccc' }}>?</Avatar>
           )}
           {item.module && <span style={{ maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.module}</span>}
         </Space>

@@ -41,6 +41,7 @@ model WorkItem {
   customerId     String?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+  deletedAt     DateTime?          // P2-4 软删除
   comments      Comment[]
   reviews       Review[]
   currentNode   FlowNode?          @relation("CurrentNode", fields: [currentNodeId], references: [id])
@@ -960,6 +961,7 @@ model Project {
   createdBy      String?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?  // P2-4 软删除
   customer       Customer   @relation(fields: [customerId], references: [id])
   carModel       CarModel   @relation(fields: [carModelId], references: [id])
   workItems      WorkItem[]

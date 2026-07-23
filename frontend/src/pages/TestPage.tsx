@@ -372,7 +372,7 @@ function TestPlanModal({ open, plan, onClose, onSaved }: { open: boolean; plan: 
 function PlanDetailDrawer({ data, onClose, onChanged }: { data: any; onClose: () => void; onChanged: () => void }) {
   const [addCaseOpen, setAddCaseOpen] = useState(false);
   const [allCases, setAllCases] = useState<any[]>([]);
-  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<React.Key[]>([]);
 
   if (!data) return null;
   const planCases: any[] = data.planCases || [];
@@ -418,7 +418,7 @@ function PlanDetailDrawer({ data, onClose, onChanged }: { data: any; onClose: ()
         ]}
       />
       <Modal title="添加用例到计划" open={addCaseOpen} onCancel={() => setAddCaseOpen(false)} onOk={async () => {
-        await testApi.addCasesToPlan(data.id, { caseIds: selectedCaseIds });
+        await testApi.addCasesToPlan(data.id, { caseIds: selectedCaseIds as string[] });
         message.success(`已添加 ${selectedCaseIds.length} 个用例`);
         setAddCaseOpen(false);
         setSelectedCaseIds([]);

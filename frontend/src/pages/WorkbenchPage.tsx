@@ -41,7 +41,7 @@ interface Props {
 export function WorkbenchPage({ userId }: Props) {
   const { user } = useAuth();
   const effectiveUserId = userId || user?.username || '';
-  const [data, setData] = useState<WorkbenchData | null>(null);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -317,7 +317,7 @@ export function WorkbenchPage({ userId }: Props) {
               <List
                 size="small"
                 dataSource={data.myUnreadNotifs}
-                renderItem={(n) => (
+                renderItem={(n: any) => (
                   <List.Item style={{ cursor: 'pointer' }} onClick={() => navigate(n.link || '/notifications')}>
                     <List.Item.Meta
                       avatar={<Avatar size="small" style={{ backgroundColor: NOTIF_LEVEL_COLOR[n.level] || '#1890ff' }} icon={<BellOutlined />} />}

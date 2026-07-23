@@ -20,12 +20,12 @@ const SEGMENT_COLOR: Record<string, string> = {
 };
 
 export function CarModelPage() {
-  const [list, setList] = useState<CarModel[]>([]);
+  const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [brandFilter, setBrandFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
-  const [editing, setEditing] = useState<CarModel | null>(null);
+  const [editing, setEditing] = useState<any>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form] = Form.useForm();
   const [byBrand, setByBrand] = useState<any>(null);
@@ -137,7 +137,7 @@ export function CarModelPage() {
       dataIndex: 'name',
       key: 'name',
       width: 220,
-      render: (v: string, r: CarModel) => (
+      render: (v: any, r: any) => (
         <Space>
           <Avatar style={{ background: '#722ed1' }} icon={<CarOutlined />} size="small" />
           <div>
@@ -152,34 +152,34 @@ export function CarModelPage() {
       dataIndex: 'brand',
       key: 'brand',
       width: 110,
-      render: (v: string) => <Tag color="geekblue">{v}</Tag>,
+      render: (v: any) => <Tag color="geekblue">{v}</Tag>,
     },
     {
       title: '细分市场',
       dataIndex: 'segment',
       key: 'segment',
       width: 130,
-      render: (v: string) => v ? <Tag color={SEGMENT_COLOR[v] || 'default'}>{v}</Tag> : '-',
+      render: (v: any) => v ? <Tag color={SEGMENT_COLOR[v] || 'default'}>{v}</Tag> : '-',
     },
     {
       title: '上市年份',
       dataIndex: 'launchYear',
       key: 'launchYear',
       width: 100,
-      render: (v: number) => v || '-',
+      render: (v: any) => v || '-',
     },
     {
       title: '平台',
       dataIndex: 'platform',
       key: 'platform',
       width: 110,
-      render: (v: string) => v ? <Tag>{v}</Tag> : '-',
+      render: (v: any) => v ? <Tag>{v}</Tag> : '-',
     },
     {
       title: '关联项目',
       key: 'projects',
       width: 110,
-      render: (_: any, r: CarModel) => (
+      render: (_: any, r: any) => (
         <Tooltip title={`${r._count?.projects || 0} 个 AVM 集成项目`}>
           <Tag icon={<ProjectOutlined />} color="blue">{r._count?.projects || 0}</Tag>
         </Tooltip>
@@ -189,7 +189,7 @@ export function CarModelPage() {
       title: '工作项',
       key: 'workItems',
       width: 100,
-      render: (_: any, r: CarModel) => (
+      render: (_: any, r: any) => (
         <Tooltip title={`${r._count?.workItems || 0} 个工作项`}>
           <Tag>{r._count?.workItems || 0}</Tag>
         </Tooltip>
@@ -200,14 +200,14 @@ export function CarModelPage() {
       dataIndex: 'status',
       key: 'status',
       width: 90,
-      render: (v: string) => <Tag color={v === 'active' ? 'green' : 'default'}>{v === 'active' ? '在售' : v === 'archived' ? '停售' : v}</Tag>,
+      render: (v: any) => <Tag color={v === 'active' ? 'green' : 'default'}>{v === 'active' ? '在售' : v === 'archived' ? '停售' : v}</Tag>,
     },
     {
       title: '操作',
       key: 'actions',
       width: 140,
       fixed: 'right' as const,
-      render: (_: any, r: CarModel) => (
+      render: (_: any, r: any) => (
         <Space size="small">
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(r)}>编辑</Button>
           <Popconfirm title="确定删除该车型？" onConfirm={() => handleDelete(r.id)}>
@@ -216,7 +216,7 @@ export function CarModelPage() {
         </Space>
       ),
     },
-  ];
+  ] as any;
 
   return (
     <div>

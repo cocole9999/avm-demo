@@ -30,12 +30,12 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export function CustomerPage() {
-  const [list, setList] = useState<Customer[]>([]);
+  const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
-  const [editing, setEditing] = useState<Customer | null>(null);
+  const [editing, setEditing] = useState<any>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [form] = Form.useForm();
   const [stats, setStats] = useState<any>(null);
@@ -163,7 +163,7 @@ export function CustomerPage() {
       dataIndex: 'name',
       key: 'name',
       width: 280,
-      render: (v: string, r: Customer) => (
+      render: (v: any, r: any) => (
         <Space>
           <Avatar style={{ background: r.type === 'internal' ? '#1890ff' : '#52c41a' }} icon={<BankOutlined />} size="small" />
           <div>
@@ -178,20 +178,20 @@ export function CustomerPage() {
       dataIndex: 'type',
       key: 'type',
       width: 100,
-      render: (v: string) => <Tag color={v === 'internal' ? 'blue' : 'green'}>{v === 'internal' ? '内部' : '外部'}</Tag>,
+      render: (v: any) => <Tag color={v === 'internal' ? 'blue' : 'green'}>{v === 'internal' ? '内部' : '外部'}</Tag>,
     },
     {
       title: '主联系人',
       dataIndex: 'contact',
       key: 'contact',
       width: 160,
-      render: (v: string) => v || '-',
+      render: (v: any) => v || '-',
     },
     {
       title: '联系信息',
       key: 'contactInfo',
       width: 220,
-      render: (_: any, r: Customer) => (
+      render: (_: any, r: any) => (
         <Space direction="vertical" size={0} style={{ fontSize: 12 }}>
           {r.phone && <span><PhoneOutlined /> {r.phone}</span>}
           {r.email && <span style={{ color: '#999' }}><MailOutlined /> {r.email}</span>}
@@ -202,7 +202,7 @@ export function CustomerPage() {
       title: '项目数',
       key: 'projects',
       width: 90,
-      render: (_: any, r: Customer) => (
+      render: (_: any, r: any) => (
         <Tooltip title={`已关联 ${r._count?.projects || 0} 个 AVM 集成项目`}>
           <Badge count={r._count?.projects || 0} showZero color="#1890ff" />
         </Tooltip>
@@ -212,7 +212,7 @@ export function CustomerPage() {
       title: '联系人数',
       key: 'contacts',
       width: 100,
-      render: (_: any, r: Customer) => (
+      render: (_: any, r: any) => (
         <Tooltip title={`UPL/PPM/测试/开发/AVM接口人 共 ${r._count?.contacts || 0} 人`}>
           <Tag icon={<TeamOutlined />} color="cyan">{r._count?.contacts || 0} 人</Tag>
         </Tooltip>
@@ -223,14 +223,14 @@ export function CustomerPage() {
       dataIndex: 'status',
       key: 'status',
       width: 90,
-      render: (v: string) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v] || v}</Tag>,
+      render: (v: any) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v] || v}</Tag>,
     },
     {
       title: '操作',
       key: 'actions',
       width: 140,
       fixed: 'right' as const,
-      render: (_: any, r: Customer) => (
+      render: (_: any, r: any) => (
         <Space size="small">
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(r)}>编辑</Button>
           <Popconfirm
@@ -243,7 +243,7 @@ export function CustomerPage() {
         </Space>
       ),
     },
-  ];
+  ] as any;
 
   return (
     <div>
@@ -423,8 +423,8 @@ export function CustomerPage() {
 }
 
 // 客户详情：基本信息 + 联系人 + 关联项目
-function CustomerDetail({ customer, activeTab, setActiveTab }: { customer: Customer; activeTab: string; setActiveTab: (s: string) => void }) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
+function CustomerDetail({ customer, activeTab, setActiveTab }: { customer: any; activeTab: string; setActiveTab: (s: string) => void }) {
+  const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   // 详情视图用独立 form 实例（避免 useForm 未连接的警告）
   const [viewForm] = Form.useForm();
@@ -531,9 +531,9 @@ function CustomerDetail({ customer, activeTab, setActiveTab }: { customer: Custo
 }
 
 // 联系人列表
-function ContactList({ customerId, contacts, loading, reload }: { customerId: string; contacts: Contact[]; loading: boolean; reload: () => void }) {
+function ContactList({ customerId, contacts, loading, reload }: { customerId: string; contacts: any[]; loading: boolean; reload: () => void }) {
   const { message: msgApi } = App.useApp();
-  const [editing, setEditing] = useState<Contact | null>(null);
+  const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
   const [aiFillingContact, setAiFillingContact] = useState(false);
@@ -571,7 +571,7 @@ function ContactList({ customerId, contacts, loading, reload }: { customerId: st
     setOpen(true);
   };
 
-  const handleEdit = (c: Contact) => {
+  const handleEdit = (c: any) => {
     setEditing(c);
     form.setFieldsValue(c);
     setOpen(true);
@@ -619,21 +619,21 @@ function ContactList({ customerId, contacts, loading, reload }: { customerId: st
         columns={[
           {
             title: '姓名', dataIndex: 'name', key: 'name',
-            render: (v: string, r: Contact) => (
+            render: (v: any, r: any) => (
               <Space>
-                <Avatar size="small" style={{ background: r.primary ? '#1890ff' : '#999' }}>{v[0]}</Avatar>
+                <Avatar size="small" style={{ background: r.primary ? '#1890ff' : '#999' }}>{v?.[0]}</Avatar>
                 {v} {r.primary && <Tag color="red" style={{ marginLeft: 4 }}>主联系人</Tag>}
               </Space>
             ),
           },
-          { title: '角色', dataIndex: 'role', key: 'role', render: (v: string) => <Tag color={ROLE_COLOR[v]}>{v}</Tag> },
+          { title: '角色', dataIndex: 'role', key: 'role', render: (v: any) => <Tag color={ROLE_COLOR[v] || 'default'}>{v}</Tag> },
           { title: '部门', dataIndex: 'department', key: 'department' },
           { title: '电话', dataIndex: 'phone', key: 'phone' },
           { title: '邮箱', dataIndex: 'email', key: 'email' },
           { title: '备注', dataIndex: 'note', key: 'note' },
           {
             title: '操作', key: 'actions', width: 140,
-            render: (_: any, r: Contact) => (
+            render: (_: any, r: any) => (
               <Space size="small">
                 <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(r)}>编辑</Button>
                 <Popconfirm title="确定删除？" onConfirm={() => handleDelete(r.id)}>
@@ -642,7 +642,7 @@ function ContactList({ customerId, contacts, loading, reload }: { customerId: st
               </Space>
             ),
           },
-        ]}
+        ] as any}
       />
       <Modal
         title={editing ? '编辑联系人' : '添加联系人'}

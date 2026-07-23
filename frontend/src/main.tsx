@@ -7,6 +7,13 @@ import 'antd/dist/reset.css';
 import Root from './Root';
 import { AuthProvider } from './AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { initSentry, sentryEnabled } from './sentry';
+
+// V1.30.3 P2-8: Sentry 初始化（必须最早）
+initSentry();
+if (sentryEnabled()) {
+  console.info('[AVM] Sentry 错误追踪已启用');
+}
 
 // 把 antd 的静态 message.xxx() 重定向到 <App> 提供的 dynamic instance，
 // 消除 "Static function can not consume context like dynamic theme" 警告。

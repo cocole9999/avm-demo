@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@sentry/node": "^10.67.0",
     "@types/multer": "^2.2.0",
     "@types/ws": "^8.18.1",
     "bcryptjs": "^2.4.3",
@@ -38,7 +39,8 @@
     "multer": "^2.2.0",
     "winston": "^3.17.0",
     "ws": "^8.21.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import { caches, withCache } from '../cache';
 import { requireAuth, autoRole } from '../middleware/auth';
+import { requireProjectOwnership } from '../middleware/ownership';
 import { recordAudit, actorFromReq, diffFields } from '../utils/audit';
 
 export const projectRouter = Router();
@@ -44,7 +45,7 @@ projectRouter.get('/', async (req, res) => {
     const cached = caches.projects.get('list:all');
     if (cached) return res.json(cached);
   }
-  const where: any = {};
+  const where: any = { deletedAt: null }; // P2-4: 过滤软删除记录
   if (status) where.status = status;
   if (customerId) where.customerId = customerId;
   if (carModelId) where.carModelId = carModelId;
@@ -105,7 +106,7 @@ projectRouter.post('/', autoRole(), async (req, res) => {
 });
 
 // 更新
-projectRouter.patch('/:id', autoRole(), async (req, res) => {
+projectRouter.patch('/:id', requireProjectOwnership(), autoRole(), async (req, res) => {
   try {
     const before = await prisma.project.findUnique({ where: { id: req.params.id } });
     const data = pickFields(req.body, PROJECT_UPDATE_FIELDS);
@@ -128,17 +129,21 @@ projectRouter.patch('/:id', autoRole(), async (req, res) => {
   }
 });
 
-// 删除
-projectRouter.delete('/:id', autoRole(), async (req, res) => {
+// 删除 - 软删除
+projectRouter.delete('/:id', requireProjectOwnership(), autoRole(), async (req, res) => {
   try {
     const before = await prisma.project.findUnique({ where: { id: req.params.id } });
-    await prisma.project.delete({ where: { id: req.params.id } });
+    await prisma.project.update({
+      where: { id: req.params.id },
+      data: { deletedAt: new Date() }
+    });
     caches.projects.invalidate('list:all');
-    recordAudit('project', req.params.id, 'delete', null, {
-      ip: req.ip, method: 'DELETE', path: '/projects/:id',
-      summary: `删除项目 ${before?.code} ${before?.name}`
-    }, actorFromReq(req));
-    res.json({ ok: true });
+    if (before) {
+      recordAudit('project', req.params.id, 'delete', null, {
+        ip: req.ip, method: 'DELETE', path: '/projects/:id', summary: `软删除项目 ${before.code}`
+      }, actorFromReq(req));
+    }
+    res.status(204).end();
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }

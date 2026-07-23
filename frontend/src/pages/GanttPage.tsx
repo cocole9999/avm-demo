@@ -19,10 +19,10 @@ import {
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { Link } from 'react-router-dom';
-import { workItemApi, projectApi, workItemApi as _wia, iterationApi } from '../api';
+import { workItemApi, projectApi, iterationApi } from '../api';
+import type { GanttProject as GanttProjectType, GanttItem as GanttItemType, GanttRelation as GanttRelationType, GanttData } from '../types';
 import { useAuth } from '../AuthContext';
 import { BurndownChart } from '../components/BurndownChart';
-import { createStyles } from 'antd-style';
 
 type Scale = 'day' | 'week' | 'month';
 const SCALE_PX: Record<Scale, number> = { day: 40, week: 22, month: 12 };
@@ -45,26 +45,29 @@ const STATUS_COLOR: Record<string, string> = {
   '已验收': 'cyan', '规划中': 'default', '待评审': 'default', '待修复': 'orange',
 };
 
-interface GanttItem {
-  id: string; key: string; title: string; type: string; status: string; priority: string;
-  assignee?: string | null; estimate?: number | null; actualHours?: number | null;
-  planStart?: string | null; planEnd?: string | null;
-  actualStart?: string | null; actualEnd?: string | null;
+interface GanttItem extends GanttItemType {
+  priority: string;
+  estimate?: number | null;
+  actualHours?: number | null;
+  actualStart?: string | null;
+  actualEnd?: string | null;
   hasSchedule: boolean;
   project?: { code: string; name: string };
   iteration?: { id: string; name: string } | null;
-  // V1.12.1: relations
   relatedFrom?: { id: string; toId: string; relationType: string }[];
   relatedTo?: { id: string; fromId: string; relationType: string }[];
 }
 
-interface GanttProject {
-  id: string; code: string; name: string; status: string;
-  startDate: string; endDate: string;
+interface GanttProject extends GanttProjectType {
+  startDate: string;
+  endDate: string;
 }
 
 interface GanttRelation {
-  id: string; fromId: string; toId: string; type: string;
+  id: string;
+  fromId: string;
+  toId: string;
+  type: string;
 }
 
 export function GanttPage() {
@@ -144,7 +147,16 @@ export function GanttPage() {
       if (selectedProject) params.projectCode = selectedProject;
       params.includeUnscheduled = showUnscheduled ? 'true' : 'false';
       const d = await workItemApi.gantt(params);
-      setData(d);
+      const transformedData = {
+        ...d,
+        relations: (d.relations || []).map((r: any) => ({
+          id: r.id,
+          fromId: r.fromId || r.from,
+          toId: r.toId || r.to,
+          type: r.type,
+        })),
+      } as unknown as { projects: GanttProject[]; items: GanttItem[]; relations?: GanttRelation[]; summary: any; dateRange: { from: string; to: string } };
+      setData(transformedData);
     } catch (e: any) {
       message.error('加载失败：' + e.message);
     } finally {
@@ -789,7 +801,7 @@ export function GanttPage() {
                 <Col span={4}><Card size="small"><Statistic title="工时偏差" value={`${retroData.summary.totalEstimate}h / ${retroData.summary.totalActual}h`} valueStyle={{ fontSize: 14 }} /></Card></Col>
               </Row>
               {/* Markdown 内容 */}
-              <div style={{ maxHeight: 500, overflow: 'auto', padding: '0 8px', lineHeight: 1.7, background: '#fafafa', borderRadius: 6, padding: 12 }}>
+              <div style={{ maxHeight: 500, overflow: 'auto', padding: 12, lineHeight: 1.7, background: '#fafafa', borderRadius: 6 }}>
                 {renderRetroMarkdown(retroData.report || '')}
               </div>
             </>

@@ -200,6 +200,7 @@ export function GlobalAIAssistant() {
           tooltip="AI 助理 (Ctrl+K)"
           style={{ right: 24, bottom: 24, width: 56, height: 56 }}
           onClick={() => setOpen(true)}
+          aria-label="打开 AI 助理"
         />
       </Badge>
 
@@ -223,6 +224,7 @@ export function GlobalAIAssistant() {
         width={520}
         closeIcon={<CloseOutlined />}
         styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 55px)' } }}
+        aria-label="AI 助理对话面板"
         extra={
           <Popconfirm
             title="清空对话历史？"
@@ -244,8 +246,9 @@ export function GlobalAIAssistant() {
                 onPressEnter={() => send()}
                 disabled={loading}
                 size="large"
+                aria-label="AI 助理输入框"
               />
-              <Button type="primary" size="large" icon={<SendOutlined />} onClick={() => send()} loading={loading}>
+              <Button type="primary" size="large" icon={<SendOutlined />} onClick={() => send()} loading={loading} aria-label="发送消息">
                 发送
               </Button>
             </Space.Compact>

@@ -30,7 +30,7 @@ const PRIORITY_COLOR: Record<string, string> = {
 
 export function TreeViewPage() {
   const [type, setType] = useState('requirement');
-  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [tree, setTree] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [expandedAll, setExpandedAll] = useState(true);
@@ -188,7 +188,7 @@ export function TreeViewPage() {
 }
 
 function TreeNodeView({ node, depth, defaultExpand, showProgress, baselineMap, onClick }: {
-  node: TreeNode; depth: number; defaultExpand: boolean; showProgress: boolean;
+  node: any; depth: number; defaultExpand: boolean; showProgress: boolean;
   baselineMap: Record<string, { planStart: string; planEnd: string }>;
   onClick: (id: string, type: string) => void;
 }) {
@@ -290,7 +290,7 @@ function TreeNodeView({ node, depth, defaultExpand, showProgress, baselineMap, o
         })()}
       </div>
 
-      {expanded && node.children.map(child => (
+      {expanded && node.children?.map((child: any) => (
         <TreeNodeView
           key={child.id}
           node={child}

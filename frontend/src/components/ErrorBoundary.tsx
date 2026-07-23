@@ -43,6 +43,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             <Button key="reload" type="primary" onClick={() => window.location.reload()}>刷新页面</Button>,
             <Button key="reset" onClick={this.reset}>重试</Button>,
           ]}
+          aria-live="assertive"
         >
           <Collapse
             items={[{

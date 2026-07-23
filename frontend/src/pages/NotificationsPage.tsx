@@ -35,7 +35,7 @@ const LEVEL_COLOR: Record<string, string> = {
 export function NotificationsPage({ userId = 'zhangsan' }: Props) {
   const { message } = App.useApp();
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
-  const [list, setList] = useState<Notification[]>([]);
+  const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [creatingTask, setCreatingTask] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function NotificationsPage({ userId = 'zhangsan' }: Props) {
 
   useEffect(() => { load(); }, [userId, filter]);
 
-  const handleMarkRead = async (n: Notification) => {
+  const handleMarkRead = async (n: any) => {
     await notificationApi.markRead(n.id);
     await load();
   };
@@ -70,7 +70,7 @@ export function NotificationsPage({ userId = 'zhangsan' }: Props) {
     await load();
   };
 
-  const handleCreateFollowUp = async (n: Notification, e: React.MouseEvent) => {
+  const handleCreateFollowUp = async (n: any, e: React.MouseEvent) => {
     e.stopPropagation();
     setCreatingTask(n.id);
     try {

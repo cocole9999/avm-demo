@@ -3,7 +3,9 @@ import { prisma } from '../db';
 import { STATUS_BY_TYPE, TYPE_OPTIONS, TYPE_PREFIX } from '../constants';
 import { initWorkItemNode } from '../services/flowEngine';
 import { requireAuth, autoRole } from '../middleware/auth';
+import { requireWorkItemOwnership } from '../middleware/ownership';
 import { recordAudit, actorFromReq } from '../utils/audit';
+import { workItemCreateSchema, workItemUpdateSchema } from '../utils/validation';
 
 export const workItemRouter = Router();
 
@@ -24,7 +26,7 @@ workItemRouter.get('/', async (req, res) => {
     type, status, priority, assignee, iterationId, q, parentId, module,
   } = req.query as Record<string, string | undefined>;
 
-  const where: any = {};
+  const where: any = { deletedAt: null }; // P2-4: 过滤软删除记录
   if (type && type !== 'all') where.type = type;
   if (status) where.status = status;
   if (priority) where.priority = priority;
@@ -270,12 +272,19 @@ workItemRouter.get('/:id', async (req, res) => {
 
 // POST /api/work-items - 创建
 workItemRouter.post('/', async (req, res) => {
-  const {
-    type, title, description = '', priority, severity,
-    assignee, reporter, module: mod, labels, iterationId,
-    estimate, planStart, planEnd, parentId,
-    projectId, carModelId, customerId,  // V1.7
-  } = req.body;
+  try {
+    // P2-2: 输入验证
+    const parsed = workItemCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: '输入验证失败', details: parsed.error.issues });
+    }
+    const {
+      type, title, description, priority, severity,
+      assignee, reporter, module: mod, labels, iterationId,
+      estimate, planStart, planEnd,
+      parentId,
+      projectId, carModelId, customerId,
+    } = parsed.data;
 
   if (!TYPE_OPTIONS.includes(type)) {
     return res.status(400).json({ error: `Invalid type: ${type}` });
@@ -299,7 +308,7 @@ workItemRouter.post('/', async (req, res) => {
       assignee: assignee || null,
       reporter: reporter || '系统',
       module: mod || null,
-      labels: labels || '',
+      labels: Array.isArray(labels) ? labels.join(',') : (labels || ''),
       iterationId: iterationId || null,
       estimate: estimate != null ? Number(estimate) : null,
       planStart: planStart ? new Date(planStart) : null,
@@ -312,11 +321,11 @@ workItemRouter.post('/', async (req, res) => {
     },
   });
 
-  // 尝试关联到流程的起�?�节点（V1.1�?
+  // 尝试关联到流程的起始节点（V1.1）
   try {
     await initWorkItemNode(created.id, type);
-  } catch {
-    // 流程不存在时不影响创�?
+  } catch (_e) {
+    // 流程不存在时不影响创建
   }
 
   await prisma.activity.create({
@@ -329,151 +338,162 @@ workItemRouter.post('/', async (req, res) => {
   });
 
   res.status(201).json(created);
+  } catch (e: any) {
+    console.error('[workItems POST]', e);
+    if (!res.headersSent) res.status(500).json({ error: e?.message || 'Internal error' });
+  }
 });
 
 // PATCH /api/work-items/:id - 更新（支持 id 或 key）
-workItemRouter.patch('/:id', async (req, res) => {
+workItemRouter.patch('/:id', requireWorkItemOwnership(), async (req, res) => {
   try {
-  let before = await prisma.workItem.findUnique({ where: { id: req.params.id } });
-  if (!before) before = await prisma.workItem.findUnique({ where: { key: req.params.id } });
-  if (!before) return res.status(404).json({ error: 'WorkItem not found' });
+    // P2-2: 输入验证
+    const parsed = workItemUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: '输入验证失败', details: parsed.error.issues });
+    }
 
-  const allowed: any = {};
-  const {
-    title, description, status, priority, severity,
-    assignee, reporter, module: mod, labels, iterationId,
-    estimate, actualHours, planStart, planEnd, actualStart, actualEnd,
-    parentId,
-    projectId, carModelId, customerId,  // V1.7
-  } = req.body;
+    let before = await prisma.workItem.findUnique({ where: { id: req.params.id } });
+    if (!before) before = await prisma.workItem.findUnique({ where: { key: req.params.id } });
+    if (!before) return res.status(404).json({ error: 'WorkItem not found' });
 
-  // V1.27 文本字段长度上限 (防止 DoS / 存储爆炸)
-  if (title !== undefined) {
-    if (typeof title !== 'string') return res.status(400).json({ error: 'title 必须是字符串' });
-    if (title.length > 200) return res.status(400).json({ error: 'title 长度不能超过 200' });
-    allowed.title = title;
-  }
-  if (description !== undefined) {
-    if (typeof description !== 'string') return res.status(400).json({ error: 'description 必须是字符串' });
-    if (description.length > 10000) return res.status(400).json({ error: 'description 长度不能超过 10000' });
-    allowed.description = description;
-  }
-  if (status !== undefined) {
-    // 校验状态机
-    const cfg = STATUS_BY_TYPE[before.type as keyof typeof STATUS_BY_TYPE];
-    // cfg.values 是 readonly tuple, .includes 需要 string union
-    if (!(cfg.values as readonly string[]).includes(status)) {
-      return res.status(400).json({ error: `Invalid status '${status}' for type '${before.type}'` });
-    }
-    allowed.status = status;
+    const allowed: any = {};
+    const {
+      title, description, status, priority, severity,
+      assignee, reporter, module: mod, labels, iterationId,
+      estimate, actualHours, planStart, planEnd, actualStart, actualEnd,
+      parentId,
+      projectId, carModelId, customerId,  // V1.7
+    } = parsed.data;
 
-    // 首次进?"进行中"自动记录 actualStart
-    const inProgress = ['开发中', '修复中', '进行中', '集成中'];
-    const completed = ['已关闭', '已驳回', '已完成', '已发布', '已验收'];
-    if (inProgress.includes(status) && !before.actualStart) {
-      allowed.actualStart = new Date();
+    // V1.27 文本字段长度上限 (防止 DoS / 存储爆炸)
+    if (title !== undefined) {
+      if (typeof title !== 'string') return res.status(400).json({ error: 'title 必须是字符串' });
+      if (title.length > 200) return res.status(400).json({ error: 'title 长度不能超过 200' });
+      allowed.title = title;
     }
-    if (completed.includes(status) && !before.actualEnd) {
-      allowed.actualEnd = new Date();
+    if (description !== undefined) {
+      if (typeof description !== 'string') return res.status(400).json({ error: 'description 必须是字符串' });
+      if (description.length > 10000) return res.status(400).json({ error: 'description 长度不能超过 10000' });
+      allowed.description = description;
     }
-  }
-  if (priority !== undefined) allowed.priority = priority;
-  if (severity !== undefined) allowed.severity = severity;
-  if (assignee !== undefined) allowed.assignee = assignee;
-  if (reporter !== undefined) allowed.reporter = reporter;
-  if (mod !== undefined) allowed.module = mod;
-  if (labels !== undefined) allowed.labels = labels;
-  if (iterationId !== undefined) allowed.iterationId = iterationId || null;
+    if (status !== undefined) {
+      // 校验状态机
+      const cfg = STATUS_BY_TYPE[before.type as keyof typeof STATUS_BY_TYPE];
+      if (!(cfg.values as readonly string[]).includes(status)) {
+        return res.status(400).json({ error: `Invalid status '${status}' for type '${before.type}'` });
+      }
+      allowed.status = status;
 
-  // V1.27 数值字段范围校验 + 日期有效性校验
-  if (estimate !== undefined) {
-    const n = estimate != null ? Number(estimate) : null;
-    if (n != null && (isNaN(n) || n < 0 || n > 10000)) {
-      return res.status(400).json({ error: 'estimate 必须在 0-10000 小时之间' });
+      // 首次进入"进行中"自动记录 actualStart
+      const inProgress = ['开发中', '修复中', '进行中', '集成中'];
+      const completed = ['已关闭', '已驳回', '已完成', '已发布', '已验收'];
+      if (inProgress.includes(status) && !before.actualStart) {
+        allowed.actualStart = new Date();
+      }
+      if (completed.includes(status) && !before.actualEnd) {
+        allowed.actualEnd = new Date();
+      }
     }
-    allowed.estimate = n;
-  }
-  if (actualHours !== undefined) {
-    const n = actualHours != null ? Number(actualHours) : null;
-    if (n != null && (isNaN(n) || n < 0 || n > 10000)) {
-      return res.status(400).json({ error: 'actualHours 必须在 0-10000 小时之间' });
-    }
-    allowed.actualHours = n;
-  }
-  const parseDate = (v: any, field: string) => {
-    if (v === null || v === undefined || v === '') return null;
-    const d = new Date(v);
-    if (isNaN(d.getTime())) {
-      throw { __dateError: true, field, value: v };
-    }
-    return d;
-  };
-  try {
-    if (planStart !== undefined) allowed.planStart = parseDate(planStart, 'planStart');
-    if (planEnd !== undefined) allowed.planEnd = parseDate(planEnd, 'planEnd');
-    if (actualStart !== undefined) allowed.actualStart = parseDate(actualStart, 'actualStart');
-    if (actualEnd !== undefined) allowed.actualEnd = parseDate(actualEnd, 'actualEnd');
-  } catch (de: any) {
-    if (de && de.__dateError) {
-      return res.status(400).json({ error: `${de.field} 日期格式无效: '${de.value}'` });
-    }
-    throw de;
-  }
+    if (priority !== undefined) allowed.priority = priority;
+    if (severity !== undefined) allowed.severity = severity;
+    if (assignee !== undefined) allowed.assignee = assignee;
+    if (reporter !== undefined) allowed.reporter = reporter;
+    if (mod !== undefined) allowed.module = mod;
+    if (labels !== undefined) allowed.labels = labels;
+    if (iterationId !== undefined) allowed.iterationId = iterationId || null;
 
-  if (parentId !== undefined) allowed.parentId = parentId || null;
-  // V1.7
-  if (projectId !== undefined) allowed.projectId = projectId || null;
-  if (carModelId !== undefined) allowed.carModelId = carModelId || null;
-  if (customerId !== undefined) allowed.customerId = customerId || null;
-
-  const updated = await prisma.workItem.update({
-    where: { id: before.id },  // 用 before.id（不是 req.params.id，支持 key）
-    data: allowed,
-  });
-
-  // 记录动??
-  if (req.body.actor || reporter) {
-    const actor = req.body.actor || '系统';
-    if (before.status !== updated.status) {
-      await prisma.activity.create({
-        data: {
-          workItemId: updated.id, actor,
-          action: 'status_changed',
-          field: 'status',
-          oldValue: before.status,
-          newValue: updated.status,
-        },
-      });
+    // V1.27 数值字段范围校验 + 日期有效性校验
+    if (estimate !== undefined) {
+      const n = estimate != null ? Number(estimate) : null;
+      if (n != null && (isNaN(n) || n < 0 || n > 10000)) {
+        return res.status(400).json({ error: 'estimate 必须在 0-10000 小时之间' });
+      }
+      allowed.estimate = n;
     }
-    // 字段变更记录
-    for (const k of Object.keys(allowed)) {
-      if (k === 'status') continue;
-      const oldV = (before as any)[k];
-      const newV = (updated as any)[k];
-      if (oldV !== newV) {
+    if (actualHours !== undefined) {
+      const n = actualHours != null ? Number(actualHours) : null;
+      if (n != null && (isNaN(n) || n < 0 || n > 10000)) {
+        return res.status(400).json({ error: 'actualHours 必须在 0-10000 小时之间' });
+      }
+      allowed.actualHours = n;
+    }
+    const parseDate = (v: any, field: string) => {
+      if (v === null || v === undefined || v === '') return null;
+      const d = new Date(v);
+      if (isNaN(d.getTime())) {
+        throw { __dateError: true, field, value: v };
+      }
+      return d;
+    };
+    try {
+      if (planStart !== undefined) allowed.planStart = parseDate(planStart, 'planStart');
+      if (planEnd !== undefined) allowed.planEnd = parseDate(planEnd, 'planEnd');
+      if (actualStart !== undefined) allowed.actualStart = parseDate(actualStart, 'actualStart');
+      if (actualEnd !== undefined) allowed.actualEnd = parseDate(actualEnd, 'actualEnd');
+    } catch (de: any) {
+      if (de && de.__dateError) {
+        return res.status(400).json({ error: `${de.field} 日期格式无效: '${de.value}'` });
+      }
+      throw de;
+    }
+
+    if (parentId !== undefined) allowed.parentId = parentId || null;
+    if (projectId !== undefined) allowed.projectId = projectId || null;
+    if (carModelId !== undefined) allowed.carModelId = carModelId || null;
+    if (customerId !== undefined) allowed.customerId = customerId || null;
+
+    const updated = await prisma.workItem.update({
+      where: { id: before.id },
+      data: allowed,
+    });
+
+    // 记录活动
+    if (req.body.actor || reporter) {
+      const actor = req.body.actor || '系统';
+      if (before.status !== updated.status) {
         await prisma.activity.create({
           data: {
             workItemId: updated.id, actor,
-            action: 'field_changed',
-            field: k,
-            oldValue: oldV == null ? null : String(oldV),
-            newValue: newV == null ? null : String(newV),
+            action: 'status_changed',
+            field: 'status',
+            oldValue: before.status,
+            newValue: updated.status,
           },
         });
       }
+      // 字段变更记录
+      for (const k of Object.keys(allowed)) {
+        if (k === 'status') continue;
+        const oldV = (before as any)[k];
+        const newV = (updated as any)[k];
+        if (oldV !== newV) {
+          await prisma.activity.create({
+            data: {
+              workItemId: updated.id, actor,
+              action: 'field_changed',
+              field: k,
+              oldValue: oldV == null ? null : String(oldV),
+              newValue: newV == null ? null : String(newV),
+            },
+          });
+        }
+      }
     }
-  }
 
-  res.json(updated);
+    res.json(updated);
   } catch (e: any) {
     console.error('[workItems PATCH]', e);
     if (!res.headersSent) res.status(500).json({ error: e.message || 'Internal error' });
   }
 });
 
-// DELETE /api/work-items/:id - 删除
-workItemRouter.delete('/:id', async (req, res) => {
-  await prisma.workItem.delete({ where: { id: req.params.id } });
+// DELETE /api/work-items/:id - 软删除
+workItemRouter.delete('/:id', requireWorkItemOwnership(), async (req, res) => {
+  await prisma.workItem.update({
+    where: { id: req.params.id },
+    data: { deletedAt: new Date() }
+  });
   res.status(204).end();
 });
 

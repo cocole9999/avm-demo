@@ -9,6 +9,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../db';
 import { env } from '../env';
+import { encrypt, decrypt } from '../utils/crypto';
 
 export const ssoRouter = Router();
 
@@ -72,22 +73,29 @@ ssoRouter.get('/tenants/:id/stats', async (req, res) => {
 
 ssoRouter.get('/tenants/:tenantId/settings', async (req, res) => {
   const list = await prisma.sSOSetting.findMany({ where: { tenantId: req.params.tenantId } });
-  // appSecret 脱敏
-  res.json(list.map(s => ({ ...s, appSecret: s.appSecret ? '***' + s.appSecret.slice(-4) : '' })));
+  // appSecret 脱敏（先解密再脱敏）
+  res.json(list.map(s => {
+    const decrypted = s.appSecret ? decrypt(s.appSecret) : '';
+    return { ...s, appSecret: decrypted ? '***' + decrypted.slice(-4) : '' };
+  }));
 });
 
 ssoRouter.put('/tenants/:tenantId/settings/:provider', async (req, res) => {
   try {
     const { enabled, appId, appSecret, redirectUri, corpId, agentId, config } = req.body;
+    // 加密 appSecret 存储
+    const encryptedSecret = appSecret ? encrypt(appSecret) : '';
     const s = await prisma.sSOSetting.upsert({
       where: { tenantId_provider: { tenantId: req.params.tenantId, provider: req.params.provider } },
-      update: { enabled, appId, appSecret, redirectUri, corpId, agentId, config: config || '{}' },
+      update: { enabled, appId, appSecret: encryptedSecret, redirectUri, corpId, agentId, config: config || '{}' },
       create: {
         tenantId: req.params.tenantId, provider: req.params.provider,
-        enabled, appId, appSecret, redirectUri, corpId, agentId, config: config || '{}',
+        enabled, appId, appSecret: encryptedSecret, redirectUri, corpId, agentId, config: config || '{}',
       },
     });
-    res.json({ ...s, appSecret: s.appSecret ? '***' + s.appSecret.slice(-4) : '' });
+    // 返回时解密并脱敏
+    const decrypted = s.appSecret ? decrypt(s.appSecret) : '';
+    res.json({ ...s, appSecret: decrypted ? '***' + decrypted.slice(-4) : '' });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
@@ -200,11 +208,15 @@ ssoRouter.get('/oauth/feishu/callback', async (req, res) => {
     });
     if (!setting) return res.status(400).send('SSO not configured');
 
+    // 解密 appSecret
+    const appSecret = decrypt(setting.appSecret);
+    if (!appSecret) return res.status(400).send('SSO appSecret not configured or decryption failed');
+
     // 1. 拿 app_access_token
     const appTokenRes = await fetch('https://open.feishu.cn/open-apis/auth/v3/app_access_token/internal', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ app_id: setting.appId, app_secret: setting.appSecret }),
+      body: JSON.stringify({ app_id: setting.appId, app_secret: appSecret }),
     });
     const appTokenData: any = await appTokenRes.json();
     if (appTokenData.code !== 0) throw new Error(`飞书 app_access_token 失败: ${appTokenData.msg}`);

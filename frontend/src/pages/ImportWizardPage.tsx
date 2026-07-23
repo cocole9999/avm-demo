@@ -21,7 +21,7 @@ import {
   UserOutlined, TeamOutlined, PartitionOutlined, ImportOutlined, EyeOutlined, ThunderboltOutlined,
   LockOutlined, CalendarOutlined,
 } from '@ant-design/icons';
-import { importApi, ImportResource, ImportMapping } from '../api';
+import { importApi, ImportResource, ImportMapping, ImportJob } from '../api';
 import { useAuth } from '../AuthContext';
 
 const { Dragger } = Upload;
@@ -54,19 +54,8 @@ interface ExecuteResult {
   errors: any[];
 }
 
-interface ImportJob {
-  id: string;
-  name: string;
-  resource: string;
-  fileName: string;
-  status: string;
-  total: number;
-  processed: number;
-  succeeded: number;
-  failed: number;
-  createdAt: string;
+interface ImportJobExtended extends ImportJob {
   finishedAt?: string;
-  errors?: string;
 }
 
 export function ImportWizardPage() {
@@ -85,8 +74,8 @@ export function ImportWizardPage() {
   const [executing, setExecuting] = useState(false);
   const [execProgress, setExecProgress] = useState(0);
   const [execResult, setExecResult] = useState<ExecuteResult | null>(null);
-  const [jobs, setJobs] = useState<ImportJob[]>([]);
-  const [jobDetail, setJobDetail] = useState<ImportJob | null>(null);
+  const [jobs, setJobs] = useState<ImportJobExtended[]>([]);
+  const [jobDetail, setJobDetail] = useState<ImportJobExtended | null>(null);
   const pollRef = useRef<any>(null);
 
   const isAdmin = me?.role === 'tenant_admin' || me?.role === 'space_admin';
@@ -107,7 +96,7 @@ export function ImportWizardPage() {
   const loadJobs = async () => {
     try {
       const list = await importApi.jobs({ limit: 30 });
-      setJobs(list);
+      setJobs(list as ImportJobExtended[]);
     } catch {}
   };
 
@@ -656,7 +645,7 @@ export function ImportWizardPage() {
                     { title: '操作', width: 80, render: (_, r) => (
                       <Button size="small" icon={<EyeOutlined />} onClick={async () => {
                         const detail = await importApi.get(r.id);
-                        setJobDetail(detail);
+                        setJobDetail(detail as ImportJobExtended);
                       }}>详情</Button>
                     )},
                   ]}
@@ -689,9 +678,9 @@ export function ImportWizardPage() {
               <Tag>文件: {jobDetail.fileName}</Tag>
               <Tag>状态: {jobDetail.status}</Tag>
             </div>
-            {jobDetail.errors && jobDetail.errors !== '[]' && (() => {
+            {jobDetail.errors && (Array.isArray(jobDetail.errors) ? jobDetail.errors.length > 0 : jobDetail.errors !== '[]') && (() => {
               try {
-                const errs = JSON.parse(jobDetail.errors);
+                const errs = Array.isArray(jobDetail.errors) ? jobDetail.errors : JSON.parse(jobDetail.errors as string);
                 if (errs.length === 0) return null;
                 return (
                   <Card size="small" title={`失败明细 (${errs.length})`}>

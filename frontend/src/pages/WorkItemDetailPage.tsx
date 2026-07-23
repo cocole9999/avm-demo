@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Card, Descriptions, Tag, Avatar, Space, Button, Select, Input, DatePicker, Checkbox,
@@ -243,6 +243,7 @@ export function WorkItemDetailPage() {
   };
 
   const handleAIEstimate = async () => {
+    if (!item) return;
     try {
       const r = await aiApi.suggestEstimate({
         type: item.type,

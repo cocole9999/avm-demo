@@ -84,10 +84,10 @@ export function AuditLogsPage() {
   const { message } = App.useApp();
   const navigate = useNavigate();
   const { user: me } = useAuth();
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [detail, setDetail] = useState<AuditLog | null>(null);
+  const [detail, setDetail] = useState<any>(null);
   const [entityFilter, setEntityFilter] = useState<string | undefined>();
   const [actionFilter, setActionFilter] = useState<string | undefined>();
   const [actorFilter, setActorFilter] = useState<string | undefined>();
@@ -256,24 +256,24 @@ export function AuditLogsPage() {
             columns={[
               {
                 title: '时间', dataIndex: 'createdAt', width: 160,
-                render: (t) => <Tooltip title={dayjs(t).format('YYYY-MM-DD HH:mm:ss')}>
+                render: (t: any) => <Tooltip title={dayjs(t).format('YYYY-MM-DD HH:mm:ss')}>
                   <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{dayjs(t).format('MM-DD HH:mm:ss')}</span>
                 </Tooltip>,
               },
               {
                 title: '实体', dataIndex: 'entity', width: 100,
-                render: (e) => <Tag color={entityColor(e)}>{entityLabel(e)}</Tag>,
+                render: (e: any) => <Tag color={entityColor(e)}>{entityLabel(e)}</Tag>,
               },
               {
                 title: '操作', dataIndex: 'action', width: 100,
-                render: (a) => {
+                render: (a: any) => {
                   const m = actionMeta(a);
                   return <Tag color={m.color} icon={m.icon}>{m.label}</Tag>;
                 },
               },
               {
                 title: '操作人', dataIndex: 'actor', width: 140,
-                render: (a, r) => (
+                render: (a: any, r: any) => (
                   <Space size={4}>
                     <UserOutlined style={{ color: '#999' }} />
                     <span>{a}</span>
@@ -283,15 +283,15 @@ export function AuditLogsPage() {
               },
               {
                 title: '摘要', width: 'auto',
-                render: (_, r) => {
-                  const meta: AuditMeta = r.meta ? JSON.parse(r.meta) : {};
-                  const changes: AuditChange[] = r.changes ? JSON.parse(r.changes) : [];
+                render: (_: any, r: any) => {
+                  const meta: any = r.meta ? JSON.parse(r.meta) : {};
+                  const changes: any[] = r.changes ? JSON.parse(r.changes) : [];
                   return (
                     <div>
                       <div>{meta.summary || '-'}</div>
                       {changes.length > 0 && (
                         <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
-                          {changes.length} 项变化: {changes.slice(0, 3).map(c => c.field).join(', ')}{changes.length > 3 ? '...' : ''}
+                          {changes.length} 项变化: {changes.slice(0, 3).map((c: any) => c.field).join(', ')}{changes.length > 3 ? '...' : ''}
                         </div>
                       )}
                     </div>
@@ -300,7 +300,7 @@ export function AuditLogsPage() {
               },
               {
                 title: '', width: 100, fixed: 'right',
-                render: (_, r) => (
+                render: (_: any, r: any) => (
                   <Space size={4}>
                     <Button size="small" icon={<EyeOutlined />} onClick={() => setDetail(r)}>详情</Button>
                     {getEntityLink(r.entity, r.entityId) && (
@@ -311,13 +311,13 @@ export function AuditLogsPage() {
                   </Space>
                 ),
               },
-            ]}
+            ] as any}
           />
         ) : (
           <Timeline
             mode="left"
-            items={logs.slice(0, 100).map(l => {
-              const meta: AuditMeta = l.meta ? JSON.parse(l.meta) : {};
+            items={logs.slice(0, 100).map((l: any) => {
+              const meta: any = l.meta ? JSON.parse(l.meta) : {};
               const am = actionMeta(l.action);
               return {
                 color: am.color === 'red' ? 'red' : am.color === 'green' ? 'green' : am.color === 'orange' ? 'orange' : 'blue',
@@ -335,7 +335,7 @@ export function AuditLogsPage() {
                   </div>
                 ),
               };
-            })}
+            }) as any}
           />
         )}
       </Card>
@@ -348,8 +348,8 @@ export function AuditLogsPage() {
         width={680}
       >
         {detail && (() => {
-          const meta: AuditMeta = detail.meta ? JSON.parse(detail.meta) : {};
-          const changes: AuditChange[] = detail.changes ? JSON.parse(detail.changes) : [];
+          const meta: any = detail.meta ? JSON.parse(detail.meta) : {};
+          const changes: any[] = detail.changes ? JSON.parse(detail.changes) : [];
           return (
             <>
               <Descriptions column={1} size="small" bordered>
@@ -368,25 +368,25 @@ export function AuditLogsPage() {
                   </Space>
                 </Descriptions.Item>
                 <Descriptions.Item label="IP / UA">
-                  {meta.ip && <Tag>{meta.ip}</Tag>}
-                  {meta.userAgent && <span style={{ fontSize: 11, color: '#999' }}>{meta.userAgent}</span>}
+                  {meta.ip && <Tag>{String(meta.ip)}</Tag>}
+                  {meta.userAgent && <span style={{ fontSize: 11, color: '#999' }}>{String(meta.userAgent)}</span>}
                 </Descriptions.Item>
-                {meta.summary && <Descriptions.Item label="摘要">{meta.summary}</Descriptions.Item>}
+                {meta.summary && <Descriptions.Item label="摘要">{String(meta.summary)}</Descriptions.Item>}
               </Descriptions>
 
               {changes.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>字段变更 ({changes.length})</div>
                   <Table
-                    rowKey={(r) => r.field}
+                    rowKey={(r: any) => r.field}
                     size="small"
                     pagination={false}
                     dataSource={changes}
                     columns={[
                       { title: '字段', dataIndex: 'field', width: 160 },
-                      { title: '原值', dataIndex: 'oldValue', render: (v) => <span style={{ color: '#cf1322' }}>{v == null ? <em>∅</em> : String(v)}</span> },
-                      { title: '新值', dataIndex: 'newValue', render: (v) => <span style={{ color: '#52c41a' }}>{v == null ? <em>∅</em> : String(v)}</span> },
-                    ]}
+                      { title: '原值', dataIndex: 'oldValue', render: (v: any) => <span style={{ color: '#cf1322' }}>{v == null ? <em>∅</em> : String(v)}</span> },
+                      { title: '新值', dataIndex: 'newValue', render: (v: any) => <span style={{ color: '#52c41a' }}>{v == null ? <em>∅</em> : String(v)}</span> },
+                    ] as any}
                   />
                 </div>
               )}

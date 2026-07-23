@@ -8,11 +8,11 @@ import { PlusOutlined, ThunderboltOutlined, ReloadOutlined, DeleteOutlined, Edit
 import { automationApi, type AutomationRule } from '../api';
 
 export function AutomationPage() {
-  const [rules, setRules] = useState<AutomationRule[]>([]);
+  const [rules, setRules] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [meta, setMeta] = useState<any>({ triggers: [], conditions: [], actions: [] });
   const [loading, setLoading] = useState(false);
-  const [editing, setEditing] = useState<AutomationRule | null>(null);
+  const [editing, setEditing] = useState<any>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [testDrawerOpen, setTestDrawerOpen] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
@@ -297,7 +297,7 @@ function ActionEditor({ actions, meta, onChange }: any) {
             />
             <Button type="link" danger size="small" onClick={() => onChange(actions.filter((_: any, idx: number) => idx !== i))}>删除</Button>
           </Space>
-          <ActionConfigEditor action={a} onChange={(config) => { const arr = [...actions]; arr[i] = { ...a, config }; onChange(arr); }} />
+          <ActionConfigEditor action={a} onChange={(config: any) => { const arr = [...actions]; arr[i] = { ...a, config }; onChange(arr); }} />
         </Space>
       ))}
       <Button block icon={<PlusOutlined />} onClick={addAct}>添加操作</Button>

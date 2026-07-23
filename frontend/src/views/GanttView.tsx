@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Tag, Tooltip, Space, Empty, Button, Select } from 'antd';
 import { LeftOutlined, RightOutlined, CameraOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
+import weekOfYear from 'dayjs/plugin/weekOfYear';
+dayjs.extend(weekOfYear);
 import type { WorkItem } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR } from '../types';
 import { baselineApi } from '../api';
