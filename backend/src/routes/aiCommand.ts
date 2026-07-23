@@ -11,6 +11,7 @@ import { toolsToOpenAIFormat, executeTool } from '../services/aiTools';
 import { prisma } from '../db';
 import { runRiskScan, startRiskScanner } from '../services/riskScanner';
 import { actorFromReq } from '../utils/audit';
+import { TYPE_PREFIX } from '../constants';
 
 export const aiCommandRouter = Router();
 
@@ -95,8 +96,8 @@ aiCommandRouter.post('/command', async (req, res) => {
         temperature: 0.2,
         maxTokens: 1500,
         tools,
-        tool_choice: i === 0 ? 'auto' : 'auto',  // 一直允许 LLM 调工具
-      } as any, undefined as any);
+        tool_choice: 'auto',  // 一直允许 LLM 调工具
+      } as any);
       if (r.usage) {
         totalPromptTokens += r.usage.promptTokens || 0;
         totalCompletionTokens += r.usage.completionTokens || 0;
@@ -586,7 +587,7 @@ aiCommandRouter.post('/notifications/:id/create-follow-up', async (req, res) => 
     }
 
     // 生成 workItem key
-    const prefix = { requirement: 'REQ', task: 'TASK', bug: 'BUG', release: 'REL' }[type] || 'TASK';
+    const prefix = TYPE_PREFIX[type] || 'TASK';
     const count = await prisma.workItem.count({ where: { type } });
     const key = `${prefix}-${count + 1}`;
 

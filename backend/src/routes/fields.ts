@@ -3,8 +3,8 @@
  */
 import { Router } from 'express';
 import { prisma } from '../db';
-import { evaluateFormula, computeItemFormulas, computeItemRollups, computeFormulaField, computeRollupField, recomputeAllDerivedFields, getFormulaMeta } from '../services/formulaEngine';
-import { computeItemDerivedFields } from '../services/rollupEngine';
+import { evaluateFormula, computeItemFormulas, computeFormulaField, getFormulaMeta } from '../services/formulaEngine';
+import { computeItemRollups, computeRollupField, computeItemDerivedFields, recomputeAllDerivedFields } from '../services/rollupEngine';
 
 export const fieldRouter = Router();
 
@@ -166,8 +166,8 @@ fieldRouter.get('/meta', (_req, res) => {
 
 // 公式语法校验
 fieldRouter.post('/validate', (req, res) => {
+  const { formula } = req.body;
   try {
-    const { formula } = req.body;
     evaluateFormula(formula, {});
     res.json({ valid: true, formula });
   } catch (e: any) {

@@ -46,5 +46,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 # 使用 tinit 提供 PID 1 信号处理
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# 启动前自动跑 prisma db push (幂等), 然后启动服务
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node dist/index.js"]
+# 启动前自动跑 prisma migrate deploy (幂等, 不丢数据), 然后启动服务
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

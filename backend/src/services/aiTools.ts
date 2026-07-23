@@ -8,6 +8,7 @@
  * - handler: 实际执行的函数
  */
 import { prisma } from '../db';
+import { TYPE_PREFIX } from '../constants';
 import {
   createProject, updateProject, deleteProject,
   createCustomer, updateCustomer,
@@ -207,7 +208,7 @@ const createWorkItem: ToolDefinition = {
       projectId = p.id;
     }
     // 生成 key
-    const prefix = { requirement: 'REQ', task: 'TASK', bug: 'BUG', release: 'REL' }[args.type] || 'ITEM';
+    const prefix = TYPE_PREFIX[args.type] || 'ITEM';
     const count = await prisma.workItem.count({ where: { type: args.type } });
     const key = `${prefix}-${count + 1}`;
     const item = await prisma.workItem.create({
@@ -297,7 +298,7 @@ const listWorkItems: ToolDefinition = {
     return list.map(i => ({
       key: i.key, type: i.type, title: i.title,
       priority: i.priority, status: i.status, assignee: i.assignee,
-      projectId: i.projectId, dueDate: i.dueDate,
+      projectId: i.projectId, dueDate: i.planEnd,
     }));
   },
 };

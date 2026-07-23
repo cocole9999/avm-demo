@@ -6,6 +6,7 @@
  * 每行数据 = 一条记录。映射 + 默认值 + 验证 + 错误收集。
  */
 import { prisma } from '../db';
+import { TYPE_PREFIX } from '../constants';
 import { hashPassword } from '../utils/password';
 import crypto from 'crypto';
 
@@ -313,7 +314,7 @@ const handlers: Record<string, ResourceHandler> = {
     const validTypes = ['requirement', 'task', 'bug', 'release'];
     if (!validTypes.includes(item.type)) throw new Error(`type 必须是 ${validTypes.join('/')}`);
     const count = await prisma.workItem.count({ where: { type: item.type } });
-    const prefix = { requirement: 'REQ', task: 'TASK', bug: 'BUG', release: 'REL' }[item.type];
+    const prefix = TYPE_PREFIX[item.type];
     // 解析 projectCode → projectId
     if (item.projectCode) {
       const p = await prisma.project.findUnique({ where: { code: item.projectCode } });

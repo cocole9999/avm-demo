@@ -16,7 +16,8 @@ import { prisma } from '../db';
 export type AuditEntity =
   | 'project' | 'customer' | 'workItem' | 'carModel' | 'contact'
   | 'dependency' | 'user' | 'webhook' | 'automation' | 'import' | 'handover'
-  | 'auth';
+  | 'auth' | 'upload' | 'template' | 'field' | 'comment' | 'space' | 'role'
+  | 'flow' | 'chart' | 'dashboard' | 'review' | 'ai';
 
 export type AuditAction =
   | 'create' | 'update' | 'delete' | 'login' | 'logout'

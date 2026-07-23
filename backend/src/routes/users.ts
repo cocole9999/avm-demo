@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { loginLimiter } from '../middleware/security';
 import { recordAudit, diffFields } from '../utils/audit';
 import { hashPassword, verifyPassword } from '../utils/password';
+import { checkPasswordStrength } from '../utils/passwordPolicy';
 import { env } from '../env';
 import crypto from 'crypto';
 
@@ -27,8 +28,10 @@ userRouter.post('/', requireRole('tenant_admin'), async (req: any, res) => {
     if (!username || !password) {
       return res.status(400).json({ error: 'username and password required' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: '密码至少 6 位' });
+    // V1.30.2 P3-1d: 强密码策略
+    const pwdCheck = checkPasswordStrength(password, username);
+    if (!pwdCheck.ok) {
+      return res.status(400).json({ error: pwdCheck.reason });
     }
     caches.users.invalidate('list:all');
     const hashed = await hashPassword(password);
@@ -60,8 +63,11 @@ userRouter.patch('/:id', requireRole('tenant_admin'), async (req: any, res) => {
     if (role !== undefined) data.role = role;
     if (active !== undefined) data.active = active;
     if (password) {
-      if (password.length < 6) {
-        return res.status(400).json({ error: '密码至少 6 位' });
+      // V1.30.2 P3-1d: 强密码策略
+      const targetUser = await prisma.user.findUnique({ where: { id: req.params.id }, select: { username: true } });
+      const pwdCheck = checkPasswordStrength(password, targetUser?.username);
+      if (!pwdCheck.ok) {
+        return res.status(400).json({ error: pwdCheck.reason });
       }
       data.password = await hashPassword(password);
       // 重置密码时同时清掉旧 token, 强制重新登录

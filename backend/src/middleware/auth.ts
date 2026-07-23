@@ -28,32 +28,28 @@ const ROLE_LEVEL: Record<Role, number> = {
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// V1.11: 白名单（不鉴权）。这些是登录前必须能访问的入口
-const PUBLIC_PATHS = [
-  '/sso',              // SSO 登录入口
-  '/users/login',      // 用户名/密码登录（拿 token）
-  '/health',           // 健康检查（一般不走 /api 也能直接挂）
-  '/llm-settings/health',  // LLM 设置健康检查
-  '/tests/health',     // 测试健康
-];
+// V1.30.3 P0-1: 白名单改为精确路径, 防止 startsWith 绕过
+//   旧: '/sso' + startsWith('/sso/') → 整个 SSO 路由无需鉴权 (CVE 级别)
+//   新: 只放行具体端点, 其余 SSO 操作需鉴权
+const PUBLIC_PATHS_EXACT = new Set([
+  '/api/users/login',        // 用户名/密码登录
+  '/api/health',             // 健康检查
+  '/api/health/deep',        // 深度健康检查
+  '/api/llm-settings/health', // LLM 设置健康检查
+  '/api/tests/health',       // 测试健康
+  '/api/sso/oauth/feishu',           // SSO 飞书登录跳转 (不需要 token)
+  '/api/sso/oauth/feishu/callback',  // SSO 飞书回调 (不需要 token)
+]);
 
-/** 判断当前请求路径是否在白名单内 */
+/** 判断当前请求路径是否在白名单内 (精确匹配, 不用 startsWith) */
 function isPublicPath(req: any): boolean {
-  // V1.30 修复: 同时检查 baseUrl+path (中间件挂 /api) 和 originalUrl (含 query)
-  //  - baseUrl='/api' + path='/users/login' → '/api/users/login'
-  //  - 兼容旧逻辑: 也支持 '/users/login' (如果中间件挂 '/')
-  const candidates = [
-    (req.baseUrl || '') + (req.path || ''),
-    req.path || '',
-    (req.originalUrl || '').split('?')[0],
-  ].filter(Boolean);
-  for (const fullPath of candidates) {
-    for (const p of PUBLIC_PATHS) {
-      if (fullPath === p || fullPath.startsWith(p + '/')) {
-        return true;
-      }
-    }
-  }
+  // 只用完整路径 (baseUrl + path), 不单独检查 req.path (旧逻辑的漏洞来源)
+  const fullPath = (req.baseUrl || '') + (req.path || '');
+  if (!fullPath) return false;
+  // 精确匹配
+  if (PUBLIC_PATHS_EXACT.has(fullPath)) return true;
+  // health 子路径 (如 /api/health/deep) 也放行
+  if (fullPath === '/api/health' || fullPath === '/api/health/deep') return true;
   return false;
 }
 

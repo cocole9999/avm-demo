@@ -25,6 +25,12 @@ export const STATUS_BY_TYPE = {
 export const PRIORITY_OPTIONS = ['P0', 'P1', 'P2', 'P3'];
 export const SEVERITY_OPTIONS = ['S0', 'S1', 'S2', 'S3'];
 export const TYPE_OPTIONS = ['requirement', 'task', 'bug', 'release'];
+export const TYPE_PREFIX: Record<string, string> = {
+  requirement: 'REQ',
+  task: 'TASK',
+  bug: 'BUG',
+  release: 'REL',
+};
 export const RELATION_TYPES = ['关联', '阻塞', '重复', '引用'];
 
 export const TYPE_LABEL: Record<string, string> = {

@@ -19,10 +19,13 @@ export const uploadRouter = Router();
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// 允许的 mime 类型
+// 允许的 mime 类型 (V1.30.3 P1: 移除 svg+xml — XSS 向量)
 const ALLOWED_MIMES = new Set([
-  'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml',
+  'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
 ]);
+
+// V1.30.3 P1: 扩展名白名单 (双重校验, 不信任客户端 mimetype)
+const ALLOWED_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
 // 内存模式 (5MB)
 const storage = multer.memoryStorage();
@@ -45,7 +48,11 @@ uploadRouter.post('/', requireAuth, (req, res, next) => {
 }, (req: any, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: '未上传文件' });
-    const ext = path.extname(req.file.originalname) || '.png';
+    // V1.30.3 P1: 扩展名白名单校验 (不信任客户端 mimetype)
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    if (!ALLOWED_EXTS.has(ext)) {
+      return res.status(400).json({ error: `不支持的文件扩展名: ${ext}` });
+    }
     const hash = crypto.randomBytes(8).toString('hex');
     const ts = Date.now();
     const safeName = `${ts}-${hash}${ext}`.replace(/[^a-zA-Z0-9._-]/g, '_');

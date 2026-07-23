@@ -11,6 +11,7 @@ import { useEffect, useState, useRef } from 'react';
 import { FloatButton, Drawer, Input, Button, Space, Tag, Spin, message as antdMessage, Avatar, Empty, Tooltip, Popconfirm, Badge } from 'antd';
 import { RobotOutlined, SendOutlined, CloseOutlined, ThunderboltOutlined, ClearOutlined, HistoryOutlined } from '@ant-design/icons';
 import { useAuth } from '../AuthContext';
+import { api } from '../api';
 
 interface Message {
   id: string;
@@ -147,11 +148,7 @@ export function GlobalAIAssistant() {
     const historyPayload = buildContextMsgs(messages);
 
     try {
-      const r = await fetch(API + '/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: q, history: historyPayload }),
-      }).then(r => r.json());
+      const r = await api.post('/ai-command/command', { command: q, history: historyPayload }).then(r => r.data);
       if (r.error) throw new Error(r.error);
       const aiMsg: Message = {
         id: genId(),
@@ -199,7 +196,7 @@ export function GlobalAIAssistant() {
       <Badge count={messageCount} size="small" offset={[-8, 8]} color="#722ed1">
         <FloatButton
           type="primary"
-          icon={<RobotOutlined />}
+          icon={<span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>AI</span>}
           tooltip="AI 助理 (Ctrl+K)"
           style={{ right: 24, bottom: 24, width: 56, height: 56 }}
           onClick={() => setOpen(true)}

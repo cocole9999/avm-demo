@@ -49,8 +49,8 @@ export function WorkloadByUser() {
       },
     },
     legend: { top: 0, right: 0, textStyle: { fontSize: 11 } },
-    xAxis: { type: 'category', data: sorted.map(u => u.user), axisLabel: { fontSize: 10, rotate: sorted.length > 6 ? 30 : 0, interval: 0 } },
-    yAxis: { type: 'value', name: '小时', axisLabel: { fontSize: 10 } },
+    xAxis: { type: 'category', data: sorted.map(u => u.user), axisLabel: { fontSize: 10, rotate: sorted.length > 6 ? 45 : 0, hideOverlap: true, width: 80, overflow: 'truncate' } },
+    yAxis: { type: 'value', name: '小时', axisLabel: { fontSize: 10, hideOverlap: true } },
     series: [
       { name: '估分', type: 'bar', data: sorted.map(u => u.totalEstimate), itemStyle: { color: '#1677ff' } },
       { name: '实际工时', type: 'bar', data: sorted.map(u => u.totalActual), itemStyle: { color: '#52c41a' } },

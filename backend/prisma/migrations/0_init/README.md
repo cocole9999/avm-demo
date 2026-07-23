@@ -1,0 +1,4 @@
+-- Migration 0_init baseline
+--   - 由 `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma` 生成
+--   - 适配已有 dev.db 数据: prisma migrate resolve --applied 0_init 把这个 migration 标记为已应用
+--   - 后续 schema 变更: prisma migrate dev (生成新 migration) → prisma migrate deploy (生产应用)

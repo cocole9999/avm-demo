@@ -3,6 +3,7 @@
  * 触发器（trigger）→ 条件（conditions）→ 操作（actions）三段式
  */
 import { prisma } from '../db';
+import { TYPE_PREFIX } from '../constants';
 
 // ============ 触发器 ============
 export const TRIGGERS = [
@@ -252,7 +253,7 @@ async function execAction(action: any, ctx: any, log: any): Promise<{ ok: boolea
       case 'create_work_item': {
         if (!ctx.spaceId) return { ok: false, detail: 'no spaceId' };
         const count = await prisma.workItem.count({ where: { type: action.config.type } });
-        const prefix = { requirement: 'REQ', task: 'TASK', bug: 'BUG', release: 'REL' }[action.config.type] || 'ITEM';
+        const prefix = TYPE_PREFIX[action.config.type] || 'ITEM';
         const newItem = await prisma.workItem.create({
           data: {
             type: action.config.type,
@@ -309,7 +310,7 @@ async function execAction(action: any, ctx: any, log: any): Promise<{ ok: boolea
         const src = await prisma.workItem.findUnique({ where: { id: ctx.workItemId } });
         if (!src) return { ok: false, detail: 'source not found' };
         const count = await prisma.workItem.count({ where: { type: src.type } });
-        const prefix = { requirement: 'REQ', task: 'TASK', bug: 'BUG', release: 'REL' }[src.type] || 'ITEM';
+        const prefix = TYPE_PREFIX[src.type] || 'ITEM';
         const clone = await prisma.workItem.create({
           data: {
             type: src.type, key: `${prefix}-${count + 1}`,
@@ -434,7 +435,7 @@ export async function testRule(rule: any, context: any): Promise<{
     actual: context[c.field],
   }));
 
-  const matched = conditions.length === 0 || conditionsEval.every(c => c.result);
+  const matched = conditions.length === 0 || conditionsEval.every((c: { result: boolean }) => c.result);
 
   const actionsPreview = actions.map((a: any) => ({
     type: a.type,

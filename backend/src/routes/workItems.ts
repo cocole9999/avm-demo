@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../db';
-import { STATUS_BY_TYPE, TYPE_OPTIONS } from '../constants';
+import { STATUS_BY_TYPE, TYPE_OPTIONS, TYPE_PREFIX } from '../constants';
 import { initWorkItemNode } from '../services/flowEngine';
 import { requireAuth, autoRole } from '../middleware/auth';
 import { recordAudit, actorFromReq } from '../utils/audit';
@@ -13,11 +13,7 @@ workItemRouter.use(autoRole());
 
 // 生成下一�?业务编号
 async function nextKey(type: string): Promise<string> {
-  const prefix =
-    type === 'requirement' ? 'REQ'
-    : type === 'task' ? 'TASK'
-    : type === 'bug' ? 'BUG'
-    : 'REL';
+  const prefix = TYPE_PREFIX[type] ?? 'REL';
   const count = await prisma.workItem.count({ where: { type } });
   return `${prefix}-${count + 1}`;
 }
@@ -363,9 +359,10 @@ workItemRouter.patch('/:id', async (req, res) => {
     allowed.description = description;
   }
   if (status !== undefined) {
-    // 校验状�?机
+    // 校验状态机
     const cfg = STATUS_BY_TYPE[before.type as keyof typeof STATUS_BY_TYPE];
-    if (!cfg.values.includes(status)) {
+    // cfg.values 是 readonly tuple, .includes 需要 string union
+    if (!(cfg.values as readonly string[]).includes(status)) {
       return res.status(400).json({ error: `Invalid status '${status}' for type '${before.type}'` });
     }
     allowed.status = status;

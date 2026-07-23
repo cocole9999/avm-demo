@@ -14,6 +14,27 @@ export const projectRouter = Router();
 // V1.11: 所有路由都要鉴权 (开发模式默认放行, 生产模式严格)
 projectRouter.use(requireAuth);
 
+// V1.30.3 P0-4: 字段白名单 (防 Mass Assignment)
+const PROJECT_CREATE_FIELDS = [
+  'code', 'name', 'description', 'status', 'customerId', 'carModelId',
+  'billingType', 'contractAmount', 'budgetHours', 'consumedHours',
+  'startDate', 'endDate', 'pmUserId', 'risk', 'progress', 'tags',
+] as const;
+
+const PROJECT_UPDATE_FIELDS = [
+  'name', 'description', 'status', 'customerId', 'carModelId',
+  'billingType', 'contractAmount', 'budgetHours', 'consumedHours',
+  'startDate', 'endDate', 'pmUserId', 'risk', 'progress', 'tags',
+] as const;
+
+function pickFields<T extends string>(body: any, fields: readonly T[]): Partial<Record<T, any>> {
+  const out: any = {};
+  for (const f of fields) {
+    if (body[f] !== undefined) out[f] = body[f];
+  }
+  return out;
+}
+
 // 列表 + 过滤（V1.10 加 LRU 缓存，5min TTL，无过滤时命中）
 projectRouter.get('/', async (req, res) => {
   const { q, status, customerId, carModelId, billingType, pmUserId, risk } = req.query as any;
@@ -71,7 +92,8 @@ projectRouter.get('/:id', async (req, res) => {
 // 创建
 projectRouter.post('/', autoRole(), async (req, res) => {
   try {
-    const p = await prisma.project.create({ data: req.body });
+    const data = pickFields(req.body, PROJECT_CREATE_FIELDS);
+    const p = await prisma.project.create({ data: data as any });
     caches.projects.invalidate('list:all');
     recordAudit('project', p.id, 'create', null, {
       ip: req.ip, method: 'POST', path: '/projects', summary: `创建项目 ${p.code} ${p.name}`
@@ -86,7 +108,8 @@ projectRouter.post('/', autoRole(), async (req, res) => {
 projectRouter.patch('/:id', autoRole(), async (req, res) => {
   try {
     const before = await prisma.project.findUnique({ where: { id: req.params.id } });
-    const p = await prisma.project.update({ where: { id: req.params.id }, data: req.body });
+    const data = pickFields(req.body, PROJECT_UPDATE_FIELDS);
+    const p = await prisma.project.update({ where: { id: req.params.id }, data: data as any });
     caches.projects.invalidate('list:all');
     if (before) {
       const changes = diffFields(before as any, p as any, [

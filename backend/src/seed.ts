@@ -81,10 +81,15 @@ async function main() {
 
   // ========== 用户（吉利 AVM 集成项目组 内部成员） ==========
   // V1.30: 使用 bcrypt 异步哈希
+  // V1.30.2 P3-1d: 强密码 (默认演示用密码, 可由 env 覆盖)
+  const envAdmin = process.env.SEED_ADMIN_PASSWORD || 'Admin@2026';
+  const envPm = process.env.SEED_PM_PASSWORD || 'Pm@2026';
+  const envUser = process.env.SEED_USER_PASSWORD || 'User@2026';
+  console.log(`   [seed] 演示密码: admin=${envAdmin}, pm=${envPm}, user=${envUser}`);
   const [adminPwd, pmPwd, userPwd] = await Promise.all([
-    hashPassword('admin123'),
-    hashPassword('pm1234'),
-    hashPassword('123456'),
+    hashPassword(envAdmin),
+    hashPassword(envPm),
+    hashPassword(envUser),
   ]);
   const users = await Promise.all([
     prisma.user.create({ data: { username: 'admin', displayName: '系统管理员', email: 'admin@avm.demo', password: adminPwd, department: 'AVM 中台', role: 'tenant_admin' } }),
@@ -635,14 +640,15 @@ async function main() {
   ]);
   console.log(`✓ 测试用例: ${testCases.length} 个（吉利 AVM 集成场景）`);
   console.log('');
-  console.log('🔑 测试账号：');
-  console.log('   admin / admin123     - 租户管理员（AVM 中台）');
-  console.log('   pm / pm123           - 空间管理员（AVM 项目经理）');
-  console.log('   zhangsan / 123456    - 业务线管理员（AVM 研发一组）');
-  console.log('   lisi / 123456        - 成员（AVM 研发一组）');
-  console.log('   wangwu / 123456      - 成员（AVM 研发二组）');
-  console.log('   zhaoliu / 123456     - 成员（AVM 研发二组）');
-  console.log('   tester / 123456      - 测试（AVM 测试部）');
+  console.log('🔑 测试账号（V1.30.2 强密码策略, 演示密码由 SEED_*_PASSWORD 环境变量覆盖）:');
+  console.log(`   admin  / ${envAdmin.padEnd(14)} - 租户管理员（AVM 中台）`);
+  console.log(`   pm     / ${envPm.padEnd(14)} - 空间管理员（AVM 项目经理）`);
+  console.log(`   zhangsan / ${userPwd.padEnd(10)} - 业务线管理员（AVM 研发一组）`);
+  console.log(`   lisi  / ${userPwd.padEnd(10)} - 成员（AVM 研发一组）`);
+  console.log(`   wangwu / ${userPwd.padEnd(10)} - 成员（AVM 研发二组）`);
+  console.log(`   zhaoliu / ${userPwd.padEnd(10)} - 成员（AVM 研发二组）`);
+  console.log(`   tester / ${userPwd.padEnd(10)} - 测试（AVM 测试部）`);
+  console.log('   ⚠️  生产环境务必覆盖 SEED_*_PASSWORD 并在首次登录后强制改密');
 
   // ========== V1.3 通知 + 收藏 + 人员排期 + 工作台配置 ==========
   console.log('\n🌱 写入 V1.3 数据...');

@@ -56,7 +56,12 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 app.use(helmetMiddleware);
 app.use(globalLimiter);
 
-app.use(cors());
+// V1.30.3 P0-2: CORS 收紧 (生产环境限制 origin)
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(cors(corsOrigin
+  ? { origin: corsOrigin.split(',').map(s => s.trim()), credentials: true }
+  : undefined  // 开发模式不限制
+));
 app.use(express.json({ limit: '10mb' }));
 
 // V1.30 结构化访问日志
@@ -123,10 +128,17 @@ app.use('/api/audit-logs', auditLogRouter);
 app.use('/api/mentions', mentionRouter);
 app.use('/api/uploads', uploadRouter);
 
+// V1.30.3 P1: 全局错误处理 — 生产环境不泄露内部信息
 app.use((err: any, _req: any, res: any, _next: any) => {
   logger.error('Unhandled error', { error: err.message, stack: err.stack });
+  const isProd = process.env.NODE_ENV === 'production';
+  if (err.status === 400 || err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: '请求体格式错误' });
+  }
   res.status(err.status || 500).json({
-    error: err.message || 'Internal Server Error',
+    error: isProd
+      ? '服务器内部错误, 请联系管理员'
+      : (err.message || 'Internal Server Error'),
   });
 });
 

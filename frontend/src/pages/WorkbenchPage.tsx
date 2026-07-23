@@ -99,7 +99,7 @@ export function WorkbenchPage({ userId }: Props) {
 
       {/* 关键指标卡片 */}
       <Row gutter={12} style={{ marginBottom: 12 }}>
-        <Col span={4}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={4}>
           <Card size="small" style={cardStyle}>
             <Statistic
               title="待开始"
@@ -109,7 +109,7 @@ export function WorkbenchPage({ userId }: Props) {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={4}>
           <Card size="small" style={cardStyle}>
             <Statistic
               title="进行中"
@@ -119,7 +119,7 @@ export function WorkbenchPage({ userId }: Props) {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={4}>
           <Card size="small" style={cardStyle}>
             <Statistic
               title="已完成"
@@ -129,7 +129,7 @@ export function WorkbenchPage({ userId }: Props) {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={4}>
           <Card size="small" style={cardStyle}>
             <Statistic
               title="临期"
@@ -139,7 +139,7 @@ export function WorkbenchPage({ userId }: Props) {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={4}>
           <Card size="small" style={cardStyle}>
             <Statistic
               title="超期"
@@ -149,7 +149,7 @@ export function WorkbenchPage({ userId }: Props) {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col xs={24} sm={12} md={8} lg={6} xl={4}>
           <Card size="small" style={cardStyle}>
             <Statistic
               title="待评审"

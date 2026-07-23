@@ -25,6 +25,7 @@ export interface RiskScanResult {
   notificationsCreated: number;
   skippedByDedup: number;
   alerts: { projectCode: string; severity: string; summary: string }[];
+  dependencyOverdue?: { overdueCount: number; notificationsCreated: number; skippedByDedup: number; items: { id: string; name: string; type: string; projectCode: string; daysOverdue: number; status: string }[] };
 }
 
 /** 核心：跑一次风险扫描 + 推送到 Notification */

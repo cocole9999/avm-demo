@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Select, Spin, Empty, Card, Space, Tag } from 'antd';
-import { iterationApi } from '../api';
+import { iterationApi, api } from '../api';
 
 interface BurndownData {
   iteration: { id: string; name: string; startDate: string; endDate: string; totalEstimate: number };
@@ -30,20 +30,20 @@ export function BurndownChart() {
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
-    fetch(`/api/iterations/${selected}/burndown`, { headers: { Authorization: `Bearer ${localStorage.getItem('avm_token') || ''}` } })
-      .then(r => r.json())
+    // V1.30.3 P0-7: 用 api 实例 (自动注入 token), 不再手动读 localStorage
+    api.get(`/iterations/${selected}/burndown`)
+      .then(r => r.data)
       .then(d => setData(d))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, [selected]);
 
   const option = data ? {
-    title: { text: `${data.iteration.name} 燃尽图`, left: 0, textStyle: { fontSize: 14 } },
-    grid: { left: 50, right: 16, top: 50, bottom: 40 },
+    grid: { left: 50, right: 16, top: 30, bottom: 40 },
     tooltip: { trigger: 'axis' },
-    legend: { top: 5, right: 0, textStyle: { fontSize: 11 } },
-    xAxis: { type: 'category', data: data.daily.map(d => d.date), axisLabel: { fontSize: 10, rotate: 30 } },
-    yAxis: { type: 'value', name: '剩余工时', axisLabel: { fontSize: 10 } },
+    legend: { top: 0, right: 0, textStyle: { fontSize: 11 } },
+    xAxis: { type: 'category', data: data.daily.map(d => d.date), axisLabel: { fontSize: 10, rotate: 30, hideOverlap: true } },
+    yAxis: { type: 'value', name: '剩余工时', nameLocation: 'end', nameGap: 15, axisLabel: { fontSize: 10, hideOverlap: true } },
     series: [
       { name: '理想剩余', type: 'line', data: data.daily.map(d => d.plannedRemaining), smooth: true, itemStyle: { color: '#1677ff' }, lineStyle: { type: 'dashed' } },
       { name: '实际剩余', type: 'line', data: data.daily.map(d => d.actualRemaining), smooth: true, itemStyle: { color: '#52c41a' } },

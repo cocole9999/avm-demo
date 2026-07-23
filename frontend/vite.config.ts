@@ -24,4 +24,10 @@ export default defineConfig({
       treeShaking: false,
     },
   },
+  // V1.30.2: 排除测试文件, 防止被 build 进生产产物
+  build: {
+    rollupOptions: {
+      external: [/\.test\./, /\.spec\./],
+    },
+  },
 });

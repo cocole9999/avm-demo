@@ -1,5 +1,32 @@
 import { useEffect, useRef } from 'react';
-import * as echarts from 'echarts';
+import * as echarts from 'echarts/core';
+import { LineChart, BarChart, ScatterChart, PieChart, RadarChart, FunnelChart, GaugeChart } from 'echarts/charts';
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent,
+  RadarComponent,
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+
+echarts.use([
+  LineChart,
+  BarChart,
+  ScatterChart,
+  PieChart,
+  RadarChart,
+  FunnelChart,
+  GaugeChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  TitleComponent,
+  DataZoomComponent,
+  RadarComponent,
+  CanvasRenderer,
+]);
 
 interface Props {
   option: any;
@@ -65,8 +92,8 @@ export function buildEChartsOption(chartType: string, data: any, options: any = 
     case 'area':
       return {
         ...base,
-        xAxis: { type: 'category', data: xData },
-        yAxis: { type: 'value' },
+        xAxis: { type: 'category', data: xData, axisLabel: { hideOverlap: true } },
+        yAxis: { type: 'value', axisLabel: { hideOverlap: true } },
         series: [{
           type: 'line', data: yData, smooth: true,
           areaStyle: chartType === 'area' ? {} : undefined,
@@ -76,8 +103,8 @@ export function buildEChartsOption(chartType: string, data: any, options: any = 
     case 'scatter':
       return {
         ...base,
-        xAxis: { type: 'value' },
-        yAxis: { type: 'value' },
+        xAxis: { type: 'value', axisLabel: { hideOverlap: true } },
+        yAxis: { type: 'value', axisLabel: { hideOverlap: true } },
         series: [{ type: 'scatter', data: rows.map((r: any, i: number) => [i, r[measure.alias || measure.field]]) }],
       };
     case 'radar': {
@@ -103,8 +130,12 @@ export function buildEChartsOption(chartType: string, data: any, options: any = 
     default:
       return {
         ...base,
-        xAxis: options.horizontal ? { type: 'value' } : { type: 'category', data: xData },
-        yAxis: options.horizontal ? { type: 'category', data: xData } : { type: 'value' },
+        xAxis: options.horizontal
+          ? { type: 'value', axisLabel: { hideOverlap: true } }
+          : { type: 'category', data: xData, axisLabel: { hideOverlap: true, rotate: xData.length > 8 ? 30 : 0 } },
+        yAxis: options.horizontal
+          ? { type: 'category', data: xData, axisLabel: { hideOverlap: true } }
+          : { type: 'value', axisLabel: { hideOverlap: true } },
         series: [{
           type: 'bar', data: yData,
           itemStyle: { color: options.color || '#1677ff' },

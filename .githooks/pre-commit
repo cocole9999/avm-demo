@@ -1,22 +1,43 @@
 #!/usr/bin/env sh
-# AVM pre-commit hook
-# 自动检测 frontend 中是否有未 import 的 React/antd 组件/图标
+# AVM pre-commit hook (V1.30.2 P3-2b)
+#
+# 自动检查:
+#   1. backend TypeScript 类型 (npx tsc --noEmit)        ← 防 P3-1a 退化
+#   2. frontend 漏 import (npm run lint)                  ← 防 React/antd ReferenceError
+#
 # 漏 import 是 Vite HMR 阶段最常见的 ReferenceError 来源
 # (ThunderboltOutlined, Alert, ... 反复踩坑 5+ 次)
 #
 # 启用方式 (项目根目录执行):
-#   git init  # 如果还没有 git
 #   git config core.hooksPath .githooks
 # 或在 README 里加这一行:
-#   husky: npx husky install && npx husky add .husky/pre-commit "cd frontend && npm run lint"
+#   husky: npx husky install && npx husky add .husky/pre-commit "sh .githooks/pre-commit"
 
 set -e
 cd "$(dirname "$0")/.."
 
-echo "🔍 AVM pre-commit: 检查 frontend import 完整性..."
-cd frontend
-if [ -f node_modules/.bin/.package-lock.json ] || [ -d node_modules ]; then
-  npm run lint --silent
+echo "🔍 AVM pre-commit: 跑类型检查 + 漏 import 检查..."
+
+# 1. backend 类型检查 (轻量, 增量)
+if [ -d backend/node_modules ]; then
+  echo "  → backend: npx tsc --noEmit"
+  (cd backend && npx tsc --noEmit) || {
+    echo "❌ backend 类型检查失败, 请先修 TS 错误再 commit";
+    exit 1;
+  }
 else
-  echo "  ⚠️  frontend/node_modules 不存在, 跳过 (请先 npm install)"
+  echo "  ⚠️  backend/node_modules 不存在, 跳过 (请先 cd backend && npm install)"
 fi
+
+# 2. frontend 漏 import 检查
+if [ -d frontend/node_modules ]; then
+  echo "  → frontend: npm run lint"
+  (cd frontend && npm run lint --silent) || {
+    echo "❌ frontend 漏 import, 请先 npm run lint:fix";
+    exit 1;
+  }
+else
+  echo "  ⚠️  frontend/node_modules 不存在, 跳过 (请先 cd frontend && npm install)"
+fi
+
+echo "✅ AVM pre-commit 检查通过"

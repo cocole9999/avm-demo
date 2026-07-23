@@ -60,6 +60,11 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
+      - name: Prisma migrate deploy (应用 migrations 到测试 PG)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://avm_test:test_pwd@localhost:5432/avm_test?schema=public
+
       - name: TypeScript 类型检查
         run: npx tsc --noEmit
 

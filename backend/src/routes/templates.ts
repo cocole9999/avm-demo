@@ -92,12 +92,13 @@ templateRouter.post('/:id/apply', async (req, res) => {
     });
 
     // 递归创建子项
+    const tt = t; // 捕获 non-null 引用, 让嵌套 async 函数能正确 narrow
     async function createChildren(items: any[], parentId: string) {
       for (const ci of items) {
-        const childKey = await generateKey(ci.type || t.workType, req.body.spaceId);
+        const childKey = await generateKey(ci.type || tt.workType, req.body.spaceId);
         const child = await prisma.workItem.create({
           data: {
-            type: ci.type || t.workType,
+            type: ci.type || tt.workType,
             key: childKey,
             title: ci.title,
             description: ci.description || '',
@@ -105,7 +106,7 @@ templateRouter.post('/:id/apply', async (req, res) => {
             reporter: 'system',
             ...ci.defaults,
             parent: { connect: { id: parentId } },
-            space: req.body.spaceId || t.spaceId ? { connect: { id: req.body.spaceId || t.spaceId } } : undefined,
+            space: req.body.spaceId || tt.spaceId ? { connect: { id: req.body.spaceId || tt.spaceId } } : undefined,
           },
         });
         if (ci.children?.length) {

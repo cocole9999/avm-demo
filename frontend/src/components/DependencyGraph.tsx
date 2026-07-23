@@ -7,7 +7,7 @@ import React, { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Spin, Empty, Tag, Space, Slider, Button, message } from 'antd';
 import { ShareAltOutlined } from '@ant-design/icons';
-import { workItemApi } from '../api';
+import { workItemApi, api } from '../api';
 
 interface Node { id: string; key: string; title: string; status: string; type: string; priority?: string; kind?: string; owner?: string; expectedDate?: string | null; blocker?: string }
 interface Edge { from: string; to: string; relationType: string }
@@ -36,8 +36,9 @@ export function DependencyGraph({ workItemId }: { workItemId: string }) {
 
   const load = (d: number) => {
     setLoading(true);
-    fetch(`/api/work-items/${workItemId}/dependency-graph?depth=${d}`, { headers: { Authorization: `Bearer ${localStorage.getItem('avm_token') || ''}` } })
-      .then(r => r.json())
+    // V1.30.3 P0-7: 用 api 实例 (自动注入 token)
+    api.get(`/work-items/${workItemId}/dependency-graph?depth=${d}`)
+      .then(r => r.data)
       .then(d => setData(d))
       .catch(err => message.error('加载失败: ' + err.message))
       .finally(() => setLoading(false));

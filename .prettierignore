@@ -1,0 +1,30 @@
+# V1.30.2 P3-2a: Prettier ignore
+node_modules/
+dist/
+build/
+coverage/
+backups/
+uploads/
+logs/
+
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# DB / dumps
+*.db
+*.db-journal
+*.sqlite
+*.dump
+
+# Generated
+*.gen.ts
+src/generated/
+
+# Big E2E logs
+final_e2e_*.log
+backend/backend.log.err
+
+# AVM 自己的 e2e python 脚本
+final_e2e_*.py

@@ -10,6 +10,35 @@ export const api = axios.create({
   timeout: 15000,
 });
 
+// V1.30.3 P0-8: axios 拦截器 — 自动注入 token + 401 跳登录
+api.interceptors.request.use((config) => {
+  try {
+    const raw = localStorage.getItem('avm-auth');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.token) {
+        config.headers.Authorization = `Bearer ${parsed.token}`;
+      }
+    }
+  } catch { /* ignore */ }
+  return config;
+});
+
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    // 401 → 清除登录态, 跳转登录页
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('avm-auth');
+      // 避免在登录页循环跳转
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login?expired=1';
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
 export const workItemApi = {
   list: (params?: Record<string, any>) => api.get<WorkItem[]>('/work-items', { params }).then(r => r.data),
   get: (id: string) => api.get<WorkItem>(`/work-items/${id}`).then(r => r.data),

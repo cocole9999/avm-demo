@@ -27,7 +27,14 @@ function getKey(): Buffer | null {
   if (_key) return _key;
   const k = env.API_KEY_ENCRYPTION_KEY;
   if (!k) {
-    // 没配置 key: 返回 null, 走明文 fallback 模式
+    // V1.30.3 P0-5: 生产环境必须有加密 key, 否则拒绝启动
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[crypto] 生产环境必须配置 API_KEY_ENCRYPTION_KEY (32 字节 base64).\n' +
+        '生成: tsx -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"'
+      );
+    }
+    // 开发模式: 返回 null, 走明文 fallback
     return null;
   }
   try {

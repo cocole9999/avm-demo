@@ -43,9 +43,9 @@ export function WorkloadTrend({ workItemId }: { workItemId: string }) {
     xAxis: {
       type: 'category',
       data: dates,
-      axisLabel: { fontSize: 10, rotate: dates.length > 8 ? 30 : 0 },
+      axisLabel: { fontSize: 10, rotate: dates.length > 8 ? 30 : 0, hideOverlap: true },
     },
-    yAxis: { type: 'value', name: '小时', axisLabel: { fontSize: 10 } },
+    yAxis: { type: 'value', name: '小时', axisLabel: { fontSize: 10, hideOverlap: true } },
     series: [
       {
         name: '估分',

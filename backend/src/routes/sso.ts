@@ -37,9 +37,16 @@ ssoRouter.post('/tenants', async (req, res) => {
   }
 });
 
+// V1.30.3 P0-4: SSO 租户字段白名单 (防 Mass Assignment)
+const TENANT_UPDATE_FIELDS = ['name', 'shortName', 'logo', 'industry', 'scale', 'contact', 'phone', 'plan', 'maxUsers'] as const;
+
 ssoRouter.patch('/tenants/:id', async (req, res) => {
   try {
-    const t = await prisma.tenant.update({ where: { id: req.params.id }, data: req.body });
+    const data: any = {};
+    for (const f of TENANT_UPDATE_FIELDS) {
+      if (req.body[f] !== undefined) data[f] = req.body[f];
+    }
+    const t = await prisma.tenant.update({ where: { id: req.params.id }, data });
     res.json(t);
   } catch (e: any) {
     res.status(400).json({ error: e.message });

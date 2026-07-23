@@ -3,6 +3,7 @@
  * 同时被 HTTP 路由（routes/mcp.ts）和 stdio 入口（bin/mcp-stdio.ts）使用
  */
 import { prisma } from '../db';
+import { TYPE_PREFIX } from '../constants';
 
 export const MCP_TOOLS = [
   {
@@ -184,7 +185,7 @@ export async function executeTool(name: string, args: any): Promise<any> {
     }
     case 'create_work_item': {
       const count = await prisma.workItem.count({ where: { type: args.type } });
-      const prefix = { requirement: 'REQ', task: 'TASK', bug: 'BUG', release: 'REL' }[args.type] || 'ITEM';
+      const prefix = TYPE_PREFIX[args.type] || 'ITEM';
       return prisma.workItem.create({
         data: {
           type: args.type, key: `${prefix}-${count + 1}`, title: args.title,
