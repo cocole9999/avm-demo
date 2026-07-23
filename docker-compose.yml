@@ -1,0 +1,123 @@
+# AVM Demo - Docker Compose (V1.30 生产化版)
+# 启动: docker compose up -d --build
+# 访问: http://localhost:8080
+#  - 8080 → 前端 (nginx:80)
+#  - 4000 → 后端 API (可选, 一般通过前端反代访问)
+#
+# 数据库切换:
+#   - 默认: PostgreSQL (生产推荐, 高并发 + 完整事务)
+#   - 切回 SQLite: 注释 postgres service, backend env 改 DATABASE_URL=file:/app/data/data.db, 并把 prisma/schema.prisma 的 provider 改回 sqlite
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: avm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: avm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-avm_dev_password}
+      POSTGRES_DB: avm
+      # 持久化优化
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avm -d avm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    container_name: avm-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # PostgreSQL 连接串 (生产推荐)
+      DATABASE_URL: "postgresql://avm:${POSTGRES_PASSWORD:-avm_dev_password}@postgres:5432/avm?schema=public"
+      # SQLite 回退: 改用 DATABASE_URL=file:/app/data/data.db + schema.prisma provider=sqlite
+      # V1.30 安全配置
+      TOKEN_TTL_HOURS: ${TOKEN_TTL_HOURS:-168}    # 7 天 token 过期
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}         # bcrypt cost
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}  # 1 分钟
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-300}       # 每窗口 300 次
+      LOG_LEVEL: ${LOG_LEVEL:-info}                # winston 日志级别
+    volumes:
+      # 上传文件持久化
+      - avm-uploads:/app/uploads
+    expose:
+      - "4000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: /api
+    container_name: avm-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"   # 浏览器访问
+      - "4000:4000" # 可选: 直接访问 backend (调试用)
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # V1.30 自动备份服务 (每日凌晨 3 点执行, 保留 7 天)
+  backup:
+    image: postgres:16-alpine
+    container_name: avm-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-avm_dev_password}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data:ro
+      - avm-backups:/backups
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        echo "🗄️  AVM backup service started, waiting for first run at 03:00 UTC..."
+        while true; do
+          NOW=$$(date +%H%M)
+          if [ "$$NOW" = "0300" ]; then
+            TS=$$(date +%Y%m%d_%H%M%S)
+            echo "[$$(date)] Running backup..."
+            pg_dump -h postgres -U avm -d avm -F c -f /backups/avm_$$TS.dump
+            echo "[$$(date)] Backup done: avm_$$TS.dump"
+            # 清理旧备份
+            find /backups -name "avm_*.dump" -mtime +$${BACKUP_KEEP_DAYS} -delete
+            echo "[$$(date)] Cleaned backups older than $${BACKUP_KEEP_DAYS} days"
+            sleep 60
+          fi
+          sleep 30
+        done
+
+volumes:
+  postgres-data:
+    driver: local
+  avm-uploads:
+    driver: local
+  avm-backups:
+    driver: local
