@@ -1,0 +1,68 @@
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/iterations[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/meta/stats[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/work-items[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/spaces[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications/unread-count?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/favorites?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/iterations[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:41:59[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/meta/stats[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:42:29[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications/unread-count?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:42:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/iterations[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:42:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/meta/stats[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:42:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/spaces[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:42:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications/unread-count?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:42:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/favorites?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:43:12[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications/unread-count?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m10:43:42[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications/unread-count?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
+[2m12:42:12[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications/unread-count?userId=admin[39m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1134:18)
+    at afterConnectMultiple (node:net:1715:7)
