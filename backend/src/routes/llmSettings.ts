@@ -4,10 +4,16 @@
  * - 测试连接
  * - 状态查询
  * - 标记主 provider
+ *
+ * V1.30.1 P2-1: apiKey 落库前用 AES-256-GCM 加密
+ *   - 入库: encrypt(plaintext) -> enc:v1:iv:tag:ct
+ *   - 出库 (展示): maskKey 显示前 4 后 4
+ *   - 调用 provider: decrypt 后再传入
  */
 import { Router } from 'express';
 import { prisma } from '../db';
 import { PROVIDERS, getLLMStatus, testProvider, clearLLMCache, OpenAICompatibleProvider, AnthropicProvider, getAvailableModels } from '../services/llmProvider';
+import { encrypt, decrypt, maskKey } from '../utils/crypto';
 
 export const llmSettingsRouter = Router();
 
@@ -15,7 +21,7 @@ export const llmSettingsRouter = Router();
 llmSettingsRouter.get('/', async (_req, res) => {
   const settings = await prisma.lLMSettings.findMany({ orderBy: { createdAt: 'asc' } });
   // 隐藏 apiKey 完整值（只显示前后几位）
-  const masked = settings.map(s => ({ ...s, apiKey: s.apiKey ? maskKey(s.apiKey) : '' }));
+  const masked = settings.map(s => ({ ...s, apiKey: s.apiKey ? maskKey(decrypt(s.apiKey)) : '' }));
   // 已配置的 provider 列表（用于"切换厂商"UI），按 primary 优先 + 已启用 + 创建时间排序
   const activeProviders = masked
     .filter(s => s.apiKey)  // 只列已配置 key 的
@@ -35,15 +41,10 @@ llmSettingsRouter.get('/', async (_req, res) => {
   res.json({ providers: PROVIDERS, settings: masked, status: await getLLMStatus(), activeProviders });
 });
 
-function maskKey(k: string): string {
-  if (k.length <= 8) return '***';
-  return k.slice(0, 4) + '***' + k.slice(-4);
-}
-
 llmSettingsRouter.get('/:provider', async (req, res) => {
   const s = await prisma.lLMSettings.findUnique({ where: { provider: req.params.provider } });
   if (!s) return res.json({ provider: req.params.provider, configured: false });
-  res.json({ ...s, apiKey: s.apiKey ? maskKey(s.apiKey) : '' });
+  res.json({ ...s, apiKey: s.apiKey ? maskKey(decrypt(s.apiKey)) : '' });
 });
 
 // 创建 / 更新（upsert）
@@ -54,9 +55,16 @@ llmSettingsRouter.put('/:provider', async (req, res) => {
     if (!meta) return res.status(400).json({ error: `未知 provider: ${req.params.provider}` });
     // 如果没传 apiKey，保留原值
     const existing = await prisma.lLMSettings.findUnique({ where: { provider: req.params.provider } });
-    const finalKey = apiKey !== undefined && apiKey !== '' && !apiKey.includes('***')
-      ? apiKey
-      : (existing?.apiKey || '');
+    let finalKey: string;
+    if (apiKey !== undefined && apiKey !== '' && !apiKey.includes('***')) {
+      // 用户传了新明文 → 加密后入库
+      finalKey = encrypt(apiKey);
+    } else if (existing?.apiKey) {
+      // 没传新值 → 保留 DB 已有值 (已经是密文)
+      finalKey = existing.apiKey;
+    } else {
+      finalKey = '';
+    }
     if (isPrimary) {
       // 取消其他主 provider
       await prisma.lLMSettings.updateMany({ where: { isPrimary: true, NOT: { provider: req.params.provider } }, data: { isPrimary: false } });
@@ -87,7 +95,7 @@ llmSettingsRouter.put('/:provider', async (req, res) => {
       },
     });
     clearLLMCache();
-    res.json({ ...s, apiKey: s.apiKey ? maskKey(s.apiKey) : '' });
+    res.json({ ...s, apiKey: s.apiKey ? maskKey(decrypt(s.apiKey)) : '' });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
@@ -109,7 +117,9 @@ llmSettingsRouter.post('/:provider/test', async (req, res) => {
   if (!apiKey || apiKey.includes('***')) {
     const s = await prisma.lLMSettings.findUnique({ where: { provider: req.params.provider } });
     if (s) {
-      apiKey = apiKey && !apiKey.includes('***') ? apiKey : s.apiKey;
+      // DB 中是密文, 解密后用
+      const decrypted = decrypt(s.apiKey);
+      apiKey = apiKey && !apiKey.includes('***') ? apiKey : decrypted;
       baseUrl = baseUrl || s.baseUrl;
     }
   }
@@ -190,7 +200,9 @@ llmSettingsRouter.post('/:provider/activate', async (req, res) => {
     const meta = PROVIDERS.find(p => p.key === req.params.provider);
     if (!meta) return res.status(404).json({ error: `未知 provider: ${req.params.provider}` });
     const existing = await prisma.lLMSettings.findUnique({ where: { provider: req.params.provider } });
-    if (!existing || !existing.apiKey) {
+    // 解密后判断是否真正有 key
+    const hasKey = existing?.apiKey ? !!decrypt(existing.apiKey) : false;
+    if (!existing || !hasKey) {
       return res.status(400).json({ error: '该 provider 尚未配置 API Key，请先在配置里填入' });
     }
     // 取消其他 primary
@@ -269,7 +281,9 @@ llmSettingsRouter.post('/test-chat', async (req, res) => {
     if (!key || key.includes('***')) {
       const s = await prisma.lLMSettings.findUnique({ where: { provider } });
       if (s) {
-        key = key && !key.includes('***') ? key : s.apiKey;
+        // DB 中是密文, 解密后用
+        const decrypted = decrypt(s.apiKey);
+        key = key && !key.includes('***') ? key : decrypted;
         url = url || s.baseUrl;
         // 同 test 端点：优先 currentModel（当前生效），再 model（默认）
         if (!m) { m = s.currentModel || s.model; }

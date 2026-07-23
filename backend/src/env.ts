@@ -30,4 +30,7 @@ export const env = {
   RATE_LIMIT_WINDOW_MS: getInt('RATE_LIMIT_WINDOW_MS', 60000),  // 1 分钟
   RATE_LIMIT_MAX: getInt('RATE_LIMIT_MAX', 300),
   LOG_LEVEL: get('LOG_LEVEL', 'info'),
+  // V1.30.1 P2-1: 敏感字段加密 (32 字节 base64, 不配置则用明文兼容旧数据)
+  // 生成: tsx -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  API_KEY_ENCRYPTION_KEY: get('API_KEY_ENCRYPTION_KEY', ''),
 };

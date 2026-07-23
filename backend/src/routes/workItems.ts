@@ -573,24 +573,25 @@ workItemRouter.post('/bulk-status', async (req, res) => {
   if (!Array.isArray(ids) || !status) {
     return res.status(400).json({ error: 'ids and status required' });
   }
-  await prisma.$transaction(
-    ids.map((id: string) =>
-      prisma.workItem.update({
-        where: { id },
-        data: { status },
-      })
-    )
-  );
-  for (const id of ids) {
-    await prisma.activity.create({
-      data: {
-        workItemId: id, actor: actor || '系统',
+  // V1.30.1 P2-2: 整体事务 (status 更新 + 活动日志 一致性)
+  const updated = await prisma.$transaction(async (tx) => {
+    const res = await Promise.all(
+      ids.map((id: string) =>
+        tx.workItem.update({ where: { id }, data: { status } })
+      )
+    );
+    await tx.activity.createMany({
+      data: ids.map((id: string) => ({
+        workItemId: id,
+        actor: actor || '系统',
         action: 'status_changed',
-        field: 'status', newValue: status,
-      },
+        field: 'status',
+        newValue: status,
+      })),
     });
-  }
-  res.json({ updated: ids.length });
+    return res;
+  });
+  res.json({ updated: updated.length });
 });
 
 // V1.18 批量更新: 支持 status/priority/assignee/iterationId/module 任意组合
@@ -626,26 +627,34 @@ workItemRouter.post('/batch-update', async (req, res) => {
     return res.status(404).json({ error: 'no work items found for given ids' });
   }
 
-  // 事务批量更新
-  const result = await prisma.workItem.updateMany({
-    where: { id: { in: ids } },
-    data,
+  // V1.30.1 P2-2: 整体事务 (workItem 更新 + 活动日志 全部一致)
+  const result = await prisma.$transaction(async (tx) => {
+    const updateRes = await tx.workItem.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+    const changedFields = Object.keys(data);
+    const actor = actorFromReq(req);
+    const activityEntries = before.flatMap((item) =>
+      changedFields.map((f) => ({
+        workItemId: item.id,
+        actor: actor?.username || '系统',
+        action: 'field_changed',
+        field: f,
+        oldValue: String((item as any)[f] || ''),
+        newValue: String(data[f] || ''),
+      })),
+    );
+    if (activityEntries.length > 0) {
+      await tx.activity.createMany({ data: activityEntries });
+    }
+    return updateRes;
   });
 
-  // 写活动日志 + 审计
+  // 审计日志 (在事务外, 审计失败不影响主流程)
   const changedFields = Object.keys(data);
   const actor = actorFromReq(req);
   for (const item of before) {
-    const activityEntries = changedFields.map(f => ({
-      workItemId: item.id,
-      actor: actor?.username || '系统',
-      action: 'field_changed',
-      field: f,
-      oldValue: String((item as any)[f] || ''),
-      newValue: String(data[f] || ''),
-    }));
-    await prisma.activity.createMany({ data: activityEntries });
-    // 审计 (per item, 1 entry with summary)
     const summary = changedFields.map(f => `${f}: ${(item as any)[f] || ''}→${data[f] || ''}`).join('; ');
     recordAudit('workItem', item.id, 'update', null, { method: 'POST /batch-update', summary: `${item.key} 批量更新 (${summary})` }, actor);
   }

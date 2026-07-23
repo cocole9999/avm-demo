@@ -7,7 +7,7 @@
  */
 import { Router } from 'express';
 import { prisma } from '../db';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, AuthedRequest } from '../middleware/auth';
 import { recordAudit, actorFromReq } from '../utils/audit';
 import { parseMentions, resolveMentions, notifyMentions } from '../utils/mentions';
 
@@ -28,7 +28,7 @@ commentRouter.get('/', async (req, res) => {
 });
 
 // 添加评论 — 解析 @提及 + 触发通知
-commentRouter.post('/', async (req, res) => {
+commentRouter.post('/', async (req: AuthedRequest, res) => {
   try {
     const { workItemId, author, content, imageUrl } = req.body;
     if (!workItemId || (!content?.trim() && !imageUrl)) {
@@ -36,22 +36,26 @@ commentRouter.post('/', async (req, res) => {
     }
     // 优先用登录用户
     const finalAuthor = req.user?.displayName || author || '匿名';
-    const comment = await prisma.comment.create({
-      data: {
-        workItemId,
-        author: finalAuthor,
-        content: (content || '').trim(),
-        imageUrl: imageUrl || null,
-      },
+    // V1.30.1 P2-2: 评论写入 + 活动日志 整体事务
+    const comment = await prisma.$transaction(async (tx) => {
+      const c = await tx.comment.create({
+        data: {
+          workItemId,
+          author: finalAuthor,
+          content: (content || '').trim(),
+          imageUrl: imageUrl || null,
+        },
+      });
+      await tx.activity.create({
+        data: {
+          workItemId, actor: finalAuthor,
+          action: 'commented',
+          meta: (content || '').slice(0, 200),
+        },
+      });
+      return c;
     });
-    await prisma.activity.create({
-      data: {
-        workItemId, actor: finalAuthor,
-        action: 'commented',
-        meta: content.slice(0, 200),
-      },
-    });
-    // 解析 @提及 → 通知 + IM 推送
+    // 解析 @提及 → 通知 + IM 推送 (在事务外, 通知失败不影响评论已落库)
     let mentionCount = 0;
     const mentions = parseMentions(content);
     if (mentions.length > 0) {
@@ -63,7 +67,7 @@ commentRouter.post('/', async (req, res) => {
       });
       if (wi) {
         await notifyMentions(
-          { id: comment.id, workItemId, author: finalAuthor, content: content.trim() },
+          { id: comment.id, workItemId, author: finalAuthor, content: (content || '').trim() },
           resolved,
           wi,
         );
@@ -78,7 +82,7 @@ commentRouter.post('/', async (req, res) => {
 });
 
 // 删除
-commentRouter.delete('/:id', async (req, res) => {
+commentRouter.delete('/:id', async (req: AuthedRequest, res) => {
   try {
     const before = await prisma.comment.findUnique({ where: { id: req.params.id } });
     if (!before) return res.status(404).json({ error: 'Comment not found' });

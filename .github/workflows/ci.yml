@@ -1,0 +1,104 @@
+# GitHub Actions CI (V1.30.1 P2-3)
+#
+# 流程:
+#   1. checkout
+#   2. setup Node 20 + npm ci
+#   3. 后端: install → prisma generate → tsc (类型检查) → vitest (单元测试)
+#   4. 前端: install → tsc (类型检查) → build
+#   5. Docker image build (仅 main 分支, 避免每次 PR 耗时)
+#
+# 触发: PR / push main
+
+name: AVM CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (lint + test)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: avm_test
+          POSTGRES_PASSWORD: test_pwd
+          POSTGRES_DB: avm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U avm_test -d avm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: avm-demo/backend
+    env:
+      DATABASE_URL: postgresql://avm_test:test_pwd@localhost:5432/avm_test?schema=public
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: avm-demo/backend/package-lock.json
+
+      - name: 切到 PG schema
+        run: cp prisma/schema.production.prisma prisma/schema.prisma
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: TypeScript 类型检查
+        run: npx tsc --noEmit
+
+      - name: 启动后端 (后台)
+        run: |
+          PORT=4200 npm start &
+          sleep 10
+          curl -f http://localhost:4200/api/health || exit 1
+        env:
+          DATABASE_URL: postgresql://avm_test:test_pwd@localhost:5432/avm_test?schema=public
+
+      - name: 跑测试
+        run: TEST_BASE_URL=http://localhost:4200 npm test
+        env:
+          DATABASE_URL: postgresql://avm_test:test_pwd@localhost:5432/avm_test?schema=public
+
+  frontend:
+    name: Frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: avm-demo/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: avm-demo/frontend/package-lock.json
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript 类型检查
+        run: npx tsc --noEmit
+
+      - name: 生产构建
+        run: npm run build
+        env:
+          VITE_API_BASE: /api

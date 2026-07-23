@@ -18,6 +18,7 @@
  *   3. 都没设 → Mock
  */
 import { prisma } from '../db';
+import { decrypt } from '../utils/crypto';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
