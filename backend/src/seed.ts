@@ -85,7 +85,7 @@ async function main() {
   // V1.30: 使用 bcrypt 异步哈希
   // V1.30.2 P3-1d: 强密码 (默认演示用密码, 可由 env 覆盖)
   const envAdmin = process.env.SEED_ADMIN_PASSWORD || 'Admin@2026';
-  const envPm = process.env.SEED_PM_PASSWORD || 'Pm@2026';
+  const envPm = process.env.SEED_PM_PASSWORD || 'Pm2026!!';
   const envUser = process.env.SEED_USER_PASSWORD || 'User@2026';
 
   // V1.30.4 商用阻塞项：生产环境禁止使用默认演示密码

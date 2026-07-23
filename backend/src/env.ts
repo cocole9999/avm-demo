@@ -43,7 +43,7 @@ export const env = {
 };
 
 const FORBIDDEN_DEFAULT_PASSWORDS = new Set([
-  'Admin@2026', 'Pm@2026', 'User@2026',
+  'Admin@2026', 'Pm2026!!', 'User@2026',
 ]);
 
 /**
