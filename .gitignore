@@ -1,0 +1,88 @@
+# Dependencies
+node_modules/
+*/node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+*/dist/
+**/dist/
+**/build/
+
+# Env files (production secrets)
+.env
+.env.local
+.env.production
+.env.*.local
+backend/.env
+frontend/.env
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backend/prisma/dev.db
+backend/prisma/data.db
+backend/data.db
+backend/backups/
+backend/logs/
+backend/uploads/
+backend/backend.log.err
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+backend/logs/*.log
+frontend/logs/*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Test outputs
+test-output/
+playwright-report/
+coverage/
+
+# OS
+.tmp/
+tmp/
+
+# IDE
+.edge-profile/
+
+# 临时调试脚本 (开发过程产物)
+_*.py
+_*.txt
+_*.log
+_*.json
+_*.csv
+_cache_*
+_t_*
+
+# Frontend
+frontend/dist/
+frontend/.vite/
+frontend/node_modules/
+
+# Python (e2e scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+.eggs/
+*.egg-info/
+venv/
+.env-python/
+.venv/
+
+# Local docker volumes
+postgres-data/
+*.dump
