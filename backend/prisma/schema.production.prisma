@@ -1,4 +1,4 @@
-﻿generator client {
+generator client {
   provider = "prisma-client-js"
 }
 
@@ -39,6 +39,7 @@ model WorkItem {
   projectId      String?
   carModelId     String?
   customerId     String?
+  deletedAt     DateTime?          // P2-4 软删除
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   comments      Comment[]
@@ -370,6 +371,7 @@ model Space {
   allocations   ResourceAllocation[]
   members       SpaceMember[]
   workItems     WorkItem[]
+  projects      Project[]
   dependencies  ExternalDependency[]
 }
 
@@ -956,10 +958,13 @@ model Project {
   progress       Int        @default(0)
   tags           String     @default("")
   createdBy      String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  spaceId        String?   // V1.30.4 空间隔离（项目归属空间）
+  deletedAt      DateTime?  // P2-4 软删除
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   customer       Customer   @relation(fields: [customerId], references: [id])
   carModel       CarModel   @relation(fields: [carModelId], references: [id])
+  space          Space?     @relation(fields: [spaceId], references: [id], onDelete: SetNull)
   workItems      WorkItem[]
   dependencies   ExternalDependency[]
 
@@ -967,6 +972,7 @@ model Project {
   @@index([carModelId])
   @@index([status])
   @@index([pmUserId])
+  @@index([spaceId])
 }
 
 // ========== V1.7.1 外部依赖管理 ==========

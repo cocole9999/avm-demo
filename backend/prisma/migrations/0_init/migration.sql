@@ -1,6 +1,6 @@
-﻿-- CreateTable
+-- CreateTable
 CREATE TABLE "WorkItem" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -8,13 +8,13 @@ CREATE TABLE "WorkItem" (
     "status" TEXT NOT NULL,
     "priority" TEXT NOT NULL DEFAULT 'P2',
     "severity" TEXT,
-    "estimate" REAL,
-    "actualHours" REAL,
-    "storyPoints" REAL,
-    "planStart" DATETIME,
-    "planEnd" DATETIME,
-    "actualStart" DATETIME,
-    "actualEnd" DATETIME,
+    "estimate" DOUBLE PRECISION,
+    "actualHours" DOUBLE PRECISION,
+    "storyPoints" DOUBLE PRECISION,
+    "planStart" TIMESTAMP(3),
+    "planEnd" TIMESTAMP(3),
+    "actualStart" TIMESTAMP(3),
+    "actualEnd" TIMESTAMP(3),
     "assignee" TEXT,
     "reporter" TEXT NOT NULL,
     "module" TEXT,
@@ -26,57 +26,55 @@ CREATE TABLE "WorkItem" (
     "projectId" TEXT,
     "carModelId" TEXT,
     "customerId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "WorkItem_currentNodeId_fkey" FOREIGN KEY ("currentNodeId") REFERENCES "FlowNode" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WorkItem_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "WorkItem" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WorkItem_iterationId_fkey" FOREIGN KEY ("iterationId") REFERENCES "Iteration" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WorkItem_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WorkItem_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WorkItem_carModelId_fkey" FOREIGN KEY ("carModelId") REFERENCES "CarModel" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "WorkItem_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WorkItem_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkItemRelation" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "fromId" TEXT NOT NULL,
     "toId" TEXT NOT NULL,
     "relationType" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "WorkItemRelation_toId_fkey" FOREIGN KEY ("toId") REFERENCES "WorkItem" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "WorkItemRelation_fromId_fkey" FOREIGN KEY ("fromId") REFERENCES "WorkItem" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "WorkItemRelation_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Iteration" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "goal" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'planning',
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
     "spaceId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Iteration_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Iteration_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Comment" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "workItemId" TEXT NOT NULL,
     "author" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "imageUrl" TEXT,
     "reactions" TEXT NOT NULL DEFAULT '{}',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "Comment_workItemId_fkey" FOREIGN KEY ("workItemId") REFERENCES "WorkItem" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Comment_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Activity" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "workItemId" TEXT,
     "actor" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -84,12 +82,14 @@ CREATE TABLE "Activity" (
     "oldValue" TEXT,
     "newValue" TEXT,
     "meta" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Activity_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AuditLog" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "entity" TEXT NOT NULL,
     "entityId" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -97,30 +97,34 @@ CREATE TABLE "AuditLog" (
     "actorRole" TEXT,
     "changes" TEXT,
     "meta" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AuditLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "NodeFlow" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "workType" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
     "version" INTEGER NOT NULL DEFAULT 1,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "NodeFlow_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "FlowNode" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "flowId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "nodeType" TEXT NOT NULL DEFAULT 'normal',
     "description" TEXT NOT NULL DEFAULT '',
-    "positionX" REAL NOT NULL DEFAULT 0,
-    "positionY" REAL NOT NULL DEFAULT 0,
+    "positionX" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "positionY" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "statusValue" TEXT,
     "roles" TEXT NOT NULL DEFAULT '',
     "requiredFields" TEXT NOT NULL DEFAULT '',
@@ -130,28 +134,28 @@ CREATE TABLE "FlowNode" (
     "dodItems" TEXT NOT NULL DEFAULT '',
     "reviewType" TEXT,
     "reviewRule" TEXT NOT NULL DEFAULT 'majority',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "FlowNode_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "NodeFlow" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "FlowNode_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "FlowTransition" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "flowId" TEXT NOT NULL,
     "fromNodeId" TEXT NOT NULL,
     "toNodeId" TEXT NOT NULL,
     "condition" TEXT NOT NULL DEFAULT '',
     "label" TEXT NOT NULL DEFAULT '',
     "isDefault" BOOLEAN NOT NULL DEFAULT false,
-    CONSTRAINT "FlowTransition_toNodeId_fkey" FOREIGN KEY ("toNodeId") REFERENCES "FlowNode" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "FlowTransition_fromNodeId_fkey" FOREIGN KEY ("fromNodeId") REFERENCES "FlowNode" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "FlowTransition_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "NodeFlow" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+
+    CONSTRAINT "FlowTransition_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Review" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "workItemId" TEXT NOT NULL,
     "reviewType" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -160,15 +164,16 @@ CREATE TABLE "Review" (
     "summary" TEXT NOT NULL DEFAULT '',
     "initiator" TEXT NOT NULL,
     "finalizer" TEXT,
-    "finalizedAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Review_workItemId_fkey" FOREIGN KEY ("workItemId") REFERENCES "WorkItem" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "finalizedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Review_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ReviewItem" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "reviewId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "itemType" TEXT NOT NULL DEFAULT 'score',
@@ -179,40 +184,44 @@ CREATE TABLE "ReviewItem" (
     "answer" TEXT,
     "comment" TEXT NOT NULL DEFAULT '',
     "completed" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ReviewItem_reviewId_fkey" FOREIGN KEY ("reviewId") REFERENCES "Review" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ReviewItem_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ReviewParticipant" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "reviewId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "userName" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'reviewer',
-    "weight" REAL NOT NULL DEFAULT 1,
+    "weight" DOUBLE PRECISION NOT NULL DEFAULT 1,
     "hasResponded" BOOLEAN NOT NULL DEFAULT false,
-    "respondedAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "ReviewParticipant_reviewId_fkey" FOREIGN KEY ("reviewId") REFERENCES "Review" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "respondedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ReviewParticipant_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ReviewTemplate" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "reviewType" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
     "items" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ReviewTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ChartConfig" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "chartType" TEXT NOT NULL,
     "dimensions" TEXT NOT NULL,
@@ -223,26 +232,29 @@ CREATE TABLE "ChartConfig" (
     "scope" TEXT NOT NULL DEFAULT 'global',
     "dashboardId" TEXT,
     "position" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "ChartConfig_dashboardId_fkey" FOREIGN KEY ("dashboardId") REFERENCES "Dashboard" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ChartConfig_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Dashboard" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
     "layout" TEXT NOT NULL DEFAULT '[]',
     "scope" TEXT NOT NULL DEFAULT 'custom',
     "target" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Dashboard_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AIFieldConfig" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "workType" TEXT NOT NULL,
     "targetField" TEXT NOT NULL,
@@ -250,13 +262,15 @@ CREATE TABLE "AIFieldConfig" (
     "prompt" TEXT NOT NULL DEFAULT '',
     "inputFields" TEXT NOT NULL DEFAULT '',
     "enabled" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "AIFieldConfig_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AIRunLog" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "configId" TEXT NOT NULL,
     "workItemId" TEXT,
     "input" TEXT NOT NULL DEFAULT '',
@@ -264,12 +278,14 @@ CREATE TABLE "AIRunLog" (
     "success" BOOLEAN NOT NULL DEFAULT true,
     "error" TEXT,
     "durationMs" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AIRunLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "User" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "displayName" TEXT NOT NULL,
     "email" TEXT,
@@ -278,23 +294,23 @@ CREATE TABLE "User" (
     "role" TEXT NOT NULL DEFAULT 'member',
     "active" BOOLEAN NOT NULL DEFAULT true,
     "token" TEXT,
-    "tokenExpiresAt" DATETIME,
     "tenantId" TEXT,
     "feishuOpenId" TEXT,
     "feishuUnionId" TEXT,
     "dingtalkId" TEXT,
     "wechatworkId" TEXT,
     "ssoBound" BOOLEAN NOT NULL DEFAULT false,
-    "lastLoginAt" DATETIME,
+    "lastLoginAt" TIMESTAMP(3),
     "lastLoginIp" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "User_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Space" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
@@ -304,24 +320,27 @@ CREATE TABLE "Space" (
     "config" TEXT NOT NULL DEFAULT '{}',
     "memberCount" INTEGER NOT NULL DEFAULT 0,
     "itemCount" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Space_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "SpaceMember" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "userName" TEXT NOT NULL,
     "role" TEXT NOT NULL DEFAULT 'member',
-    "joinedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "SpaceMember_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SpaceMember_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Tenant" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "shortName" TEXT NOT NULL DEFAULT '',
@@ -331,16 +350,18 @@ CREATE TABLE "Tenant" (
     "contact" TEXT NOT NULL DEFAULT '',
     "phone" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'active',
-    "expireAt" DATETIME,
+    "expireAt" TIMESTAMP(3),
     "maxUsers" INTEGER NOT NULL DEFAULT 100,
     "plan" TEXT NOT NULL DEFAULT 'standard',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Tenant_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "SSOSetting" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "provider" TEXT NOT NULL,
     "enabled" BOOLEAN NOT NULL DEFAULT false,
@@ -350,14 +371,15 @@ CREATE TABLE "SSOSetting" (
     "corpId" TEXT NOT NULL DEFAULT '',
     "agentId" TEXT NOT NULL DEFAULT '',
     "config" TEXT NOT NULL DEFAULT '{}',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "SSOSetting_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SSOSetting_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "SSOLog" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "provider" TEXT NOT NULL,
     "userKey" TEXT NOT NULL,
@@ -367,19 +389,20 @@ CREATE TABLE "SSOLog" (
     "userAgent" TEXT NOT NULL DEFAULT '',
     "success" BOOLEAN NOT NULL DEFAULT true,
     "errorMsg" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "SSOLog_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "SSOLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "LLMSettings" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "provider" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "baseUrl" TEXT NOT NULL DEFAULT '',
     "apiKey" TEXT NOT NULL DEFAULT '',
     "model" TEXT NOT NULL DEFAULT '',
-    "temperature" REAL NOT NULL DEFAULT 0.3,
+    "temperature" DOUBLE PRECISION NOT NULL DEFAULT 0.3,
     "maxTokens" INTEGER NOT NULL DEFAULT 2048,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "isPrimary" BOOLEAN NOT NULL DEFAULT false,
@@ -387,13 +410,15 @@ CREATE TABLE "LLMSettings" (
     "extra" TEXT NOT NULL DEFAULT '{}',
     "customModels" TEXT NOT NULL DEFAULT '[]',
     "currentModel" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "LLMSettings_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Notification" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "recipientId" TEXT NOT NULL,
     "actorId" TEXT,
@@ -406,14 +431,15 @@ CREATE TABLE "Notification" (
     "link" TEXT NOT NULL DEFAULT '',
     "meta" TEXT,
     "read" BOOLEAN NOT NULL DEFAULT false,
-    "readAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "Notification_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "readAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Favorite" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "userId" TEXT NOT NULL,
     "resourceType" TEXT NOT NULL,
@@ -424,46 +450,50 @@ CREATE TABLE "Favorite" (
     "link" TEXT NOT NULL DEFAULT '',
     "folder" TEXT NOT NULL DEFAULT '默认',
     "position" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Favorite_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Favorite_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ResourceAllocation" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "userId" TEXT NOT NULL,
     "userName" TEXT NOT NULL,
     "workItemId" TEXT NOT NULL,
     "workItemKey" TEXT NOT NULL,
     "workItemTitle" TEXT NOT NULL,
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
-    "allocatedHours" REAL NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
+    "allocatedHours" DOUBLE PRECISION NOT NULL,
     "type" TEXT NOT NULL DEFAULT 'develop',
     "status" TEXT NOT NULL DEFAULT 'planned',
     "note" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "ResourceAllocation_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ResourceAllocation_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkbenchConfig" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "defaultSpaceId" TEXT,
     "layout" TEXT NOT NULL DEFAULT '[]',
     "readNotifIds" TEXT NOT NULL DEFAULT '[]',
     "preferences" TEXT NOT NULL DEFAULT '{}',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WorkbenchConfig_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "FormulaField" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "workType" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -475,13 +505,15 @@ CREATE TABLE "FormulaField" (
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "createdBy" TEXT,
     "cachedValues" TEXT NOT NULL DEFAULT '{}',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "FormulaField_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "RollupField" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "workType" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -494,13 +526,15 @@ CREATE TABLE "RollupField" (
     "description" TEXT NOT NULL DEFAULT '',
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "cachedValues" TEXT NOT NULL DEFAULT '{}',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RollupField_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkItemTemplate" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "name" TEXT NOT NULL,
     "workType" TEXT NOT NULL,
@@ -511,13 +545,15 @@ CREATE TABLE "WorkItemTemplate" (
     "tags" TEXT NOT NULL DEFAULT '',
     "category" TEXT NOT NULL DEFAULT '通用',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WorkItemTemplate_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AutomationRule" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
@@ -526,16 +562,18 @@ CREATE TABLE "AutomationRule" (
     "conditions" TEXT NOT NULL DEFAULT '[]',
     "actions" TEXT NOT NULL,
     "runCount" INTEGER NOT NULL DEFAULT 0,
-    "lastRunAt" DATETIME,
+    "lastRunAt" TIMESTAMP(3),
     "lastRunResult" TEXT NOT NULL DEFAULT '',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "AutomationRule_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AutomationLog" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "ruleId" TEXT NOT NULL,
     "ruleName" TEXT NOT NULL,
     "triggerContext" TEXT NOT NULL DEFAULT '{}',
@@ -543,12 +581,14 @@ CREATE TABLE "AutomationLog" (
     "actionsExecuted" TEXT NOT NULL DEFAULT '[]',
     "status" TEXT NOT NULL DEFAULT 'success',
     "error" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AutomationLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WebhookConfig" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "name" TEXT NOT NULL,
     "url" TEXT NOT NULL,
@@ -560,16 +600,18 @@ CREATE TABLE "WebhookConfig" (
     "totalCalls" INTEGER NOT NULL DEFAULT 0,
     "successCalls" INTEGER NOT NULL DEFAULT 0,
     "failedCalls" INTEGER NOT NULL DEFAULT 0,
-    "lastCallAt" DATETIME,
+    "lastCallAt" TIMESTAMP(3),
     "lastCallStatus" TEXT NOT NULL DEFAULT '',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "WebhookConfig_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WebhookLog" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "configId" TEXT NOT NULL,
     "event" TEXT NOT NULL,
     "payload" TEXT NOT NULL DEFAULT '{}',
@@ -578,12 +620,14 @@ CREATE TABLE "WebhookLog" (
     "statusCode" INTEGER NOT NULL DEFAULT 200,
     "duration" INTEGER NOT NULL DEFAULT 0,
     "error" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "WebhookLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ImportJob" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "name" TEXT NOT NULL,
     "resource" TEXT NOT NULL,
@@ -597,13 +641,15 @@ CREATE TABLE "ImportJob" (
     "failed" INTEGER NOT NULL DEFAULT 0,
     "errors" TEXT NOT NULL DEFAULT '[]',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "finishedAt" DATETIME
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
+
+    CONSTRAINT "ImportJob_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkHandover" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "fromUserId" TEXT NOT NULL,
     "fromUserName" TEXT NOT NULL,
@@ -612,12 +658,14 @@ CREATE TABLE "WorkHandover" (
     "workItemIds" TEXT NOT NULL,
     "reason" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'done',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "WorkHandover_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Baseline" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "iterationId" TEXT,
     "iterationName" TEXT,
@@ -625,27 +673,31 @@ CREATE TABLE "Baseline" (
     "description" TEXT NOT NULL DEFAULT '',
     "snapshot" TEXT NOT NULL DEFAULT '[]',
     "itemCount" INTEGER NOT NULL DEFAULT 0,
-    "totalEstimate" REAL NOT NULL DEFAULT 0,
+    "totalEstimate" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "baselineType" TEXT NOT NULL DEFAULT 'iteration',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "Baseline_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ResourceAnalysis" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
     "result" TEXT NOT NULL DEFAULT '{}',
     "riskCount" INTEGER NOT NULL DEFAULT 0,
     "healthScore" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ResourceAnalysis_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TestCase" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "code" TEXT NOT NULL,
     "title" TEXT NOT NULL,
@@ -662,21 +714,23 @@ CREATE TABLE "TestCase" (
     "automated" BOOLEAN NOT NULL DEFAULT false,
     "status" TEXT NOT NULL DEFAULT 'active',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "TestCase_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TestPlan" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "spaceId" TEXT,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
     "iterationId" TEXT,
     "iterationName" TEXT,
     "workItemIds" TEXT NOT NULL DEFAULT '[]',
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'draft',
     "ownerId" TEXT,
     "ownerName" TEXT,
@@ -687,13 +741,15 @@ CREATE TABLE "TestPlan" (
     "blockedCases" INTEGER NOT NULL DEFAULT 0,
     "skippedCases" INTEGER NOT NULL DEFAULT 0,
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "TestPlan_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TestPlanCase" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "planId" TEXT NOT NULL,
     "caseId" TEXT NOT NULL,
     "orderNum" INTEGER NOT NULL DEFAULT 0,
@@ -702,16 +758,16 @@ CREATE TABLE "TestPlanCase" (
     "status" TEXT NOT NULL DEFAULT 'pending',
     "actualResult" TEXT NOT NULL DEFAULT '',
     "notes" TEXT NOT NULL DEFAULT '',
-    "executedAt" DATETIME,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "TestPlanCase_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "TestCase" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "TestPlanCase_planId_fkey" FOREIGN KEY ("planId") REFERENCES "TestPlan" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "executedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "TestPlanCase_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TestRun" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "planId" TEXT NOT NULL,
     "planName" TEXT NOT NULL,
     "runnerId" TEXT NOT NULL,
@@ -723,14 +779,15 @@ CREATE TABLE "TestRun" (
     "skipped" INTEGER NOT NULL DEFAULT 0,
     "status" TEXT NOT NULL DEFAULT 'running',
     "notes" TEXT NOT NULL DEFAULT '',
-    "startedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "finishedAt" DATETIME,
-    CONSTRAINT "TestRun_planId_fkey" FOREIGN KEY ("planId") REFERENCES "TestPlan" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
+
+    CONSTRAINT "TestRun_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "TestCaseBug" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "caseId" TEXT NOT NULL,
     "bugId" TEXT NOT NULL,
     "bugKey" TEXT NOT NULL,
@@ -738,13 +795,14 @@ CREATE TABLE "TestCaseBug" (
     "relationType" TEXT NOT NULL DEFAULT 'found_by',
     "notes" TEXT NOT NULL DEFAULT '',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT "TestCaseBug_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "TestCase" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "TestCaseBug_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Customer" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "shortName" TEXT NOT NULL DEFAULT '',
@@ -756,13 +814,15 @@ CREATE TABLE "Customer" (
     "address" TEXT NOT NULL DEFAULT '',
     "description" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'active',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Customer_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "CarModel" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "brand" TEXT NOT NULL,
@@ -772,13 +832,15 @@ CREATE TABLE "CarModel" (
     "platform" TEXT NOT NULL DEFAULT '',
     "description" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'active',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "CarModel_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Contact" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "role" TEXT NOT NULL,
@@ -788,14 +850,15 @@ CREATE TABLE "Contact" (
     "feishuId" TEXT NOT NULL DEFAULT '',
     "note" TEXT NOT NULL DEFAULT '',
     "primary" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Contact_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Contact_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Project" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
@@ -803,59 +866,62 @@ CREATE TABLE "Project" (
     "carModelId" TEXT NOT NULL,
     "pmUserId" TEXT,
     "pmUserName" TEXT,
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'planning',
     "billingType" TEXT NOT NULL DEFAULT 'ODC',
-    "contractAmount" REAL NOT NULL DEFAULT 0,
-    "budgetHours" REAL NOT NULL DEFAULT 0,
-    "consumedHours" REAL NOT NULL DEFAULT 0,
+    "contractAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "budgetHours" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "consumedHours" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "risk" TEXT NOT NULL DEFAULT 'low',
     "progress" INTEGER NOT NULL DEFAULT 0,
     "tags" TEXT NOT NULL DEFAULT '',
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "Project_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT "Project_carModelId_fkey" FOREIGN KEY ("carModelId") REFERENCES "CarModel" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    "spaceId" TEXT,
+    "deletedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Project_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "ExternalDependency" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
     "status" TEXT NOT NULL DEFAULT 'pending',
     "owner" TEXT NOT NULL DEFAULT '',
-    "expectedDate" DATETIME,
-    "actualDate" DATETIME,
+    "expectedDate" TIMESTAMP(3),
+    "actualDate" TIMESTAMP(3),
     "blocker" TEXT NOT NULL DEFAULT '',
     "workItemId" TEXT,
     "projectId" TEXT,
     "spaceId" TEXT,
     "createdBy" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
-    CONSTRAINT "ExternalDependency_workItemId_fkey" FOREIGN KEY ("workItemId") REFERENCES "WorkItem" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "ExternalDependency_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
-    CONSTRAINT "ExternalDependency_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ExternalDependency_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AIReport" (
-    "id" TEXT NOT NULL PRIMARY KEY,
+    "id" TEXT NOT NULL,
     "type" TEXT NOT NULL,
     "periodLabel" TEXT NOT NULL,
-    "startDate" DATETIME NOT NULL,
-    "endDate" DATETIME NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
     "content" TEXT NOT NULL,
     "summary" TEXT NOT NULL DEFAULT '',
     "llmModel" TEXT,
     "userFilter" TEXT,
     "projectCode" TEXT,
     "createdBy" TEXT NOT NULL DEFAULT '',
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AIReport_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -968,9 +1034,6 @@ CREATE INDEX "User_feishuUnionId_idx" ON "User"("feishuUnionId");
 
 -- CreateIndex
 CREATE INDEX "User_token_idx" ON "User"("token");
-
--- CreateIndex
-CREATE INDEX "User_tokenExpiresAt_idx" ON "User"("tokenExpiresAt");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Space_name_key" ON "Space"("name");
@@ -1156,6 +1219,9 @@ CREATE INDEX "Project_status_idx" ON "Project"("status");
 CREATE INDEX "Project_pmUserId_idx" ON "Project"("pmUserId");
 
 -- CreateIndex
+CREATE INDEX "Project_spaceId_idx" ON "Project"("spaceId");
+
+-- CreateIndex
 CREATE INDEX "ExternalDependency_type_idx" ON "ExternalDependency"("type");
 
 -- CreateIndex
@@ -1187,4 +1253,115 @@ CREATE INDEX "AIReport_type_createdAt_idx" ON "AIReport"("type", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "AIReport_createdAt_idx" ON "AIReport"("createdAt");
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_currentNodeId_fkey" FOREIGN KEY ("currentNodeId") REFERENCES "FlowNode"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "WorkItem"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_iterationId_fkey" FOREIGN KEY ("iterationId") REFERENCES "Iteration"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_carModelId_fkey" FOREIGN KEY ("carModelId") REFERENCES "CarModel"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItem" ADD CONSTRAINT "WorkItem_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItemRelation" ADD CONSTRAINT "WorkItemRelation_toId_fkey" FOREIGN KEY ("toId") REFERENCES "WorkItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkItemRelation" ADD CONSTRAINT "WorkItemRelation_fromId_fkey" FOREIGN KEY ("fromId") REFERENCES "WorkItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Iteration" ADD CONSTRAINT "Iteration_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_workItemId_fkey" FOREIGN KEY ("workItemId") REFERENCES "WorkItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FlowNode" ADD CONSTRAINT "FlowNode_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "NodeFlow"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FlowTransition" ADD CONSTRAINT "FlowTransition_toNodeId_fkey" FOREIGN KEY ("toNodeId") REFERENCES "FlowNode"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FlowTransition" ADD CONSTRAINT "FlowTransition_fromNodeId_fkey" FOREIGN KEY ("fromNodeId") REFERENCES "FlowNode"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FlowTransition" ADD CONSTRAINT "FlowTransition_flowId_fkey" FOREIGN KEY ("flowId") REFERENCES "NodeFlow"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Review" ADD CONSTRAINT "Review_workItemId_fkey" FOREIGN KEY ("workItemId") REFERENCES "WorkItem"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ReviewItem" ADD CONSTRAINT "ReviewItem_reviewId_fkey" FOREIGN KEY ("reviewId") REFERENCES "Review"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ReviewParticipant" ADD CONSTRAINT "ReviewParticipant_reviewId_fkey" FOREIGN KEY ("reviewId") REFERENCES "Review"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ChartConfig" ADD CONSTRAINT "ChartConfig_dashboardId_fkey" FOREIGN KEY ("dashboardId") REFERENCES "Dashboard"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "User" ADD CONSTRAINT "User_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SpaceMember" ADD CONSTRAINT "SpaceMember_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SSOSetting" ADD CONSTRAINT "SSOSetting_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SSOLog" ADD CONSTRAINT "SSOLog_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Favorite" ADD CONSTRAINT "Favorite_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ResourceAllocation" ADD CONSTRAINT "ResourceAllocation_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TestPlanCase" ADD CONSTRAINT "TestPlanCase_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "TestCase"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TestPlanCase" ADD CONSTRAINT "TestPlanCase_planId_fkey" FOREIGN KEY ("planId") REFERENCES "TestPlan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TestRun" ADD CONSTRAINT "TestRun_planId_fkey" FOREIGN KEY ("planId") REFERENCES "TestPlan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TestCaseBug" ADD CONSTRAINT "TestCaseBug_caseId_fkey" FOREIGN KEY ("caseId") REFERENCES "TestCase"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Contact" ADD CONSTRAINT "Contact_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Project" ADD CONSTRAINT "Project_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Project" ADD CONSTRAINT "Project_carModelId_fkey" FOREIGN KEY ("carModelId") REFERENCES "CarModel"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Project" ADD CONSTRAINT "Project_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ExternalDependency" ADD CONSTRAINT "ExternalDependency_workItemId_fkey" FOREIGN KEY ("workItemId") REFERENCES "WorkItem"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ExternalDependency" ADD CONSTRAINT "ExternalDependency_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ExternalDependency" ADD CONSTRAINT "ExternalDependency_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "Space"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 

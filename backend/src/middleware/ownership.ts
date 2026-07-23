@@ -3,11 +3,8 @@
  *
  * 权限模型:
  * - tenant_admin: 可修改所有资源
- * - space_admin: 可修改所有资源（v1.30 当前未启用空间维度隔离，预留扩展位）
+ * - space_admin: 可修改自己管理空间下的资源 (通过 project.spaceId / workItem.project.spaceId 判断)
  * - member: 只能修改自己创建的资源 (workItem.reporter 或 project.createdBy)
- *
- * 注: 当前 Project 模型无 spaceId 字段（P2 阶段未引入空间隔离）。
- *     此中间件为安全基线，所有权检查始终生效。
  */
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db';
@@ -16,7 +13,7 @@ import { AuthedRequest, Role } from './auth';
 /**
  * 工作项所有权检查
  * - tenant_admin: 通过
- * - space_admin: 当前与 tenant_admin 等同（空间隔离字段待 P3 引入）
+ * - space_admin: 检查项目空间权限
  * - member: 检查 reporter/assignee
  */
 export async function checkWorkItemOwnership(
@@ -27,23 +24,45 @@ export async function checkWorkItemOwnership(
 
   const userRole = req.user.role as Role;
 
-  // tenant_admin / space_admin 可修改所有
-  if (userRole === 'tenant_admin' || userRole === 'space_admin') {
+  // tenant_admin 可修改所有
+  if (userRole === 'tenant_admin') {
     return { allowed: true };
   }
 
-  // 查询工作项
+  // 查询工作项及其关联的项目
   const workItem = await prisma.workItem.findUnique({
     where: { id: workItemId },
     select: {
       id: true,
       reporter: true,
       assignee: true,
+      project: {
+        select: {
+          spaceId: true,
+          createdBy: true,
+        },
+      },
     },
   });
 
   if (!workItem) {
     return { allowed: false, reason: '工作项不存在' };
+  }
+
+  // space_admin: 检查是否属于自己管理的空间
+  if (userRole === 'space_admin') {
+    if (workItem.project?.spaceId) {
+      const spaceMember = await prisma.spaceMember.findFirst({
+        where: {
+          spaceId: workItem.project.spaceId,
+          userId: req.user.id,
+          role: 'admin',
+        },
+      });
+      if (spaceMember) {
+        return { allowed: true };
+      }
+    }
   }
 
   // member: 检查是否是 reporter 或 assignee
@@ -53,14 +72,14 @@ export async function checkWorkItemOwnership(
 
   return {
     allowed: false,
-    reason: '无权修改此工作项 (仅创建者或负责人可修改)',
+    reason: '无权修改此工作项 (仅创建者、负责人或空间管理员可修改)',
   };
 }
 
 /**
  * 项目所有权检查
  * - tenant_admin: 通过
- * - space_admin: 当前与 tenant_admin 等同
+ * - space_admin: 检查空间权限
  * - member: 检查 createdBy
  */
 export async function checkProjectOwnership(
@@ -71,7 +90,8 @@ export async function checkProjectOwnership(
 
   const userRole = req.user.role as Role;
 
-  if (userRole === 'tenant_admin' || userRole === 'space_admin') {
+  // tenant_admin 可修改所有
+  if (userRole === 'tenant_admin') {
     return { allowed: true };
   }
 
@@ -79,12 +99,27 @@ export async function checkProjectOwnership(
     where: { id: projectId },
     select: {
       id: true,
+      spaceId: true,
       createdBy: true,
     },
   });
 
   if (!project) {
     return { allowed: false, reason: '项目不存在' };
+  }
+
+  // space_admin: 检查空间权限
+  if (userRole === 'space_admin' && project.spaceId) {
+    const spaceMember = await prisma.spaceMember.findFirst({
+      where: {
+        spaceId: project.spaceId,
+        userId: req.user.id,
+        role: 'admin',
+      },
+    });
+    if (spaceMember) {
+      return { allowed: true };
+    }
   }
 
   // member: 检查 createdBy
@@ -94,7 +129,7 @@ export async function checkProjectOwnership(
 
   return {
     allowed: false,
-    reason: '无权修改此项目 (仅创建者可修改)',
+    reason: '无权修改此项目 (仅创建者或空间管理员可修改)',
   };
 }
 

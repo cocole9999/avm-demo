@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import {
-  initSentry, sentryErrorHandler, setupSentryExpressHandlers,
+import { initSentry, sentryErrorHandler, setupSentryExpressHandlers,
   captureException, setUser,
 } from './utils/sentry';
+import { env, validateProductionEnv } from './env';
 import { alertOnServerError } from './services/alertEngine';
 import { workItemRouter } from './routes/workItems';
 import { iterationRouter } from './routes/iterations';
@@ -57,6 +57,9 @@ const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
+// V1.30.4 商用阻塞项：生产环境强制校验（必须在任何服务启动前执行）
+validateProductionEnv();
+
 // V1.30.3 P2-8: Sentry 错误追踪（必须最早初始化）
 initSentry();
 // Sentry v10: requestData / tracing 由默认集成自动处理，无需独立 handler
@@ -67,9 +70,8 @@ app.use(helmetMiddleware);
 app.use(globalLimiter);
 
 // V1.30.3 P0-2: CORS 收紧 (生产环境限制 origin)
-const corsOrigin = process.env.CORS_ORIGIN;
-app.use(cors(corsOrigin
-  ? { origin: corsOrigin.split(',').map(s => s.trim()), credentials: true }
+app.use(cors(env.CORS_ORIGIN
+  ? { origin: env.CORS_ORIGIN.split(',').map(s => s.trim()), credentials: true }
   : undefined  // 开发模式不限制
 ));
 app.use(express.json({ limit: '10mb' }));

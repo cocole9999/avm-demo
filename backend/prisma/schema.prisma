@@ -373,6 +373,7 @@ model Space {
   allocations   ResourceAllocation[]
   members       SpaceMember[]
   workItems     WorkItem[]
+  projects      Project[]
   dependencies  ExternalDependency[]
 }
 
@@ -956,14 +957,16 @@ model Project {
   budgetHours    Float      @default(0)
   consumedHours  Float      @default(0)
   risk           String     @default("low")
-  progress       Int        @default(0)
-  tags           String     @default("")
+  progress       Int      @default(0)
+  tags           String   @default("")
   createdBy      String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  spaceId        String?   // V1.30.4 空间隔离（项目归属空间）
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   deletedAt      DateTime?  // P2-4 软删除
   customer       Customer   @relation(fields: [customerId], references: [id])
   carModel       CarModel   @relation(fields: [carModelId], references: [id])
+  space          Space?     @relation(fields: [spaceId], references: [id], onDelete: SetNull)
   workItems      WorkItem[]
   dependencies   ExternalDependency[]
 
@@ -971,6 +974,7 @@ model Project {
   @@index([carModelId])
   @@index([status])
   @@index([pmUserId])
+  @@index([spaceId])
 }
 
 // ========== V1.7.1 外部依赖管理 ==========

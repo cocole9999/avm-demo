@@ -13,6 +13,8 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { hashPassword } from './utils/password';
+import { validateSeedPassword } from './env';
+import { checkPasswordStrength } from './utils/passwordPolicy';
 
 const prisma = new PrismaClient();
 
@@ -85,7 +87,21 @@ async function main() {
   const envAdmin = process.env.SEED_ADMIN_PASSWORD || 'Admin@2026';
   const envPm = process.env.SEED_PM_PASSWORD || 'Pm@2026';
   const envUser = process.env.SEED_USER_PASSWORD || 'User@2026';
-  console.log(`   [seed] 演示密码: admin=${envAdmin}, pm=${envPm}, user=${envUser}`);
+
+  // V1.30.4 商用阻塞项：生产环境禁止使用默认演示密码
+  validateSeedPassword('admin', envAdmin);
+  validateSeedPassword('pm', envPm);
+  validateSeedPassword('user', envUser);
+
+  // 所有 seed 密码必须符合强密码策略
+  for (const [name, pwd, username] of [['admin', envAdmin, 'admin'], ['pm', envPm, 'pm'], ['user', envUser, 'zhangsan']] as const) {
+    const check = checkPasswordStrength(pwd, username);
+    if (!check.ok) {
+      throw new Error(`[seed] SEED_${name.toUpperCase()}_PASSWORD 不符合强密码策略: ${check.reason}`);
+    }
+  }
+
+  console.log(`   [seed] 演示密码: admin=***, pm=***, user=***`);
   const [adminPwd, pmPwd, userPwd] = await Promise.all([
     hashPassword(envAdmin),
     hashPassword(envPm),
@@ -225,6 +241,7 @@ async function main() {
       status: 'active', billingType: 'ODC', contractAmount: 3800000, budgetHours: 2400, consumedHours: 1620,
       risk: 'medium', progress: 67, tags: '银河系列,ODC,主力车型',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
     prisma.project.create({ data: {
       code: 'AVM-ZEEKR-001-2026', name: '极氪 001 透明底盘 + 泊车升级',
@@ -235,6 +252,7 @@ async function main() {
       status: 'active', billingType: 'ODC', contractAmount: 2800000, budgetHours: 1800, consumedHours: 980,
       risk: 'low', progress: 54, tags: '极氪,ODC,泊车',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
     prisma.project.create({ data: {
       code: 'AVM-LYNK-09-2026', name: '领克 09 AVM 泊车集成（ODM 包干）',
@@ -245,6 +263,7 @@ async function main() {
       status: 'active', billingType: 'ODM', contractAmount: 6000000, budgetHours: 4200, consumedHours: 720,
       risk: 'high', progress: 17, tags: '领克,ODM,包干,大单',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
     prisma.project.create({ data: {
       code: 'AVM-BOYUE-L-2026', name: '博越 L AVM 升级 + 工厂标定',
@@ -255,6 +274,7 @@ async function main() {
       status: 'active', billingType: 'ODC', contractAmount: 1500000, budgetHours: 1000, consumedHours: 620,
       risk: 'low', progress: 62, tags: '博越,ODC,标定',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
     prisma.project.create({ data: {
       code: 'AVM-PANDA-MINI-2026', name: '熊猫 mini AVM 标定版（固定价）',
@@ -265,6 +285,7 @@ async function main() {
       status: 'active', billingType: 'Fixed', contractAmount: 800000, budgetHours: 480, consumedHours: 310,
       risk: 'low', progress: 65, tags: '熊猫mini,固定价,标定',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
     prisma.project.create({ data: {
       code: 'AVM-ZEEKR-007-2026', name: '极氪 007 AVM 集成（Q1 启动）',
@@ -275,6 +296,7 @@ async function main() {
       status: 'planning', billingType: 'ODC', contractAmount: 2200000, budgetHours: 1400, consumedHours: 0,
       risk: 'medium', progress: 0, tags: '极氪,ODC,Q1启动',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
     prisma.project.create({ data: {
       code: 'AVM-LYNK-08-2025', name: '领克 08 AVM 升级（2025 收尾）',
@@ -285,6 +307,7 @@ async function main() {
       status: 'completed', billingType: 'ODC', contractAmount: 1800000, budgetHours: 1100, consumedHours: 1180,
       risk: 'low', progress: 100, tags: '领克,ODC,收尾',
       createdBy: 'AVM 项目经理',
+      spaceId: productSpace.id,
     }}),
   ]);
   console.log(`✓ 项目: ${projects.length} 个（覆盖银河/极氪/领克/博越/熊猫 主力车型）`);

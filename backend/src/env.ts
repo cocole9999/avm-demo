@@ -38,4 +38,54 @@ export const env = {
   SENTRY_ENABLED: get('SENTRY_ENABLED', 'true'),
   SENTRY_ENVIRONMENT: get('SENTRY_ENVIRONMENT', ''),
   SENTRY_TRACES_SAMPLE_RATE: get('SENTRY_TRACES_SAMPLE_RATE', '0.05'),
+  // V1.30.3 P0: CORS 白名单（生产必须配置）
+  CORS_ORIGIN: get('CORS_ORIGIN', ''),
 };
+
+const FORBIDDEN_DEFAULT_PASSWORDS = new Set([
+  'Admin@2026', 'Pm@2026', 'User@2026',
+]);
+
+/**
+ * 生产环境启动前强制校验。
+ * 发现阻塞性配置错误时直接抛出，避免带着隐患运行。
+ */
+export function validateProductionEnv(): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) return;
+
+  const errors: string[] = [];
+
+  // 1. CORS 白名单
+  if (!env.CORS_ORIGIN || env.CORS_ORIGIN.trim() === '') {
+    errors.push('生产环境必须配置 CORS_ORIGIN（逗号分隔的允许域名）');
+  }
+
+  // 2. API Key 加密密钥
+  if (!env.API_KEY_ENCRYPTION_KEY) {
+    errors.push('生产环境必须配置 API_KEY_ENCRYPTION_KEY（32 字节 base64）');
+  } else {
+    try {
+      const buf = Buffer.from(env.API_KEY_ENCRYPTION_KEY, 'base64');
+      if (buf.length !== 32) {
+        errors.push(`API_KEY_ENCRYPTION_KEY 解码后必须为 32 字节，当前 ${buf.length} 字节`);
+      }
+    } catch {
+      errors.push('API_KEY_ENCRYPTION_KEY 不是有效的 base64 字符串');
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`[production-env] 启动被阻止:\n${errors.map(e => `  - ${e}`).join('\n')}`);
+  }
+}
+
+/** 校验 seed 密码不能是演示默认值（生产环境） */
+export function validateSeedPassword(name: string, password: string): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!isProduction) return;
+
+  if (FORBIDDEN_DEFAULT_PASSWORDS.has(password)) {
+    throw new Error(`[production-env] 生产环境禁止使用默认演示密码 ${name}=${password}，请设置 SEED_${name.toUpperCase()}_PASSWORD`);
+  }
+}

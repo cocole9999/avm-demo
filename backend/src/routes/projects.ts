@@ -19,13 +19,13 @@ projectRouter.use(requireAuth);
 const PROJECT_CREATE_FIELDS = [
   'code', 'name', 'description', 'status', 'customerId', 'carModelId',
   'billingType', 'contractAmount', 'budgetHours', 'consumedHours',
-  'startDate', 'endDate', 'pmUserId', 'risk', 'progress', 'tags',
+  'startDate', 'endDate', 'pmUserId', 'risk', 'progress', 'tags', 'spaceId',
 ] as const;
 
 const PROJECT_UPDATE_FIELDS = [
   'name', 'description', 'status', 'customerId', 'carModelId',
   'billingType', 'contractAmount', 'budgetHours', 'consumedHours',
-  'startDate', 'endDate', 'pmUserId', 'risk', 'progress', 'tags',
+  'startDate', 'endDate', 'pmUserId', 'risk', 'progress', 'tags', 'spaceId',
 ] as const;
 
 function pickFields<T extends string>(body: any, fields: readonly T[]): Partial<Record<T, any>> {
@@ -94,6 +94,8 @@ projectRouter.get('/:id', async (req, res) => {
 projectRouter.post('/', autoRole(), async (req, res) => {
   try {
     const data = pickFields(req.body, PROJECT_CREATE_FIELDS);
+    // V1.30.4: 自动记录创建者，防止 member 冒充
+    (data as any).createdBy = (req as any).user?.username;
     const p = await prisma.project.create({ data: data as any });
     caches.projects.invalidate('list:all');
     recordAudit('project', p.id, 'create', null, {
