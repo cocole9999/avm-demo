@@ -1,0 +1,43 @@
+# Promtail 配置 — 采集 AVM 后端容器 stdout 日志，发送到 Loki
+# 生产环境后端日志已为 JSON 行格式（见 backend/src/utils/logger.ts），适合 Loki 标签化
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # 采集 Docker 容器 stdout（AVM 后端 + 备份容器）
+  - job_name: 'avm-container-logs'
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        filters:
+          - name: label
+            values: ['com.docker.compose.project=avm-demo']
+    relabel_configs:
+      # 提取容器名作为标签
+      - source_labels: ['__meta_docker_container_name']
+        target_label: 'container'
+        regex: '/(.*)'
+        replacement: '${1}'
+      # 提取服务名
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+      # 日志流标签（避免高基数）
+      - target_label: 'job'
+        replacement: 'avm-logs'
+    pipeline_stages:
+      # 解析 JSON 日志行（winston 生产格式：{timestamp,level,message,service,module,...}）
+      - json:
+          expressions:
+            level: level
+            module: module
+            message: message
+      # 从日志中提取 level 作为 Loki 标签
+      - labels:
+          level:
+          module:

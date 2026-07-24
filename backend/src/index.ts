@@ -52,6 +52,7 @@ import { helmetMiddleware, globalLimiter } from './middleware/security';
 import { csrfProtection, getCsrfToken } from './middleware/csrf';
 import { agentRouter } from './routes/agent';
 import { logger } from './utils/logger';
+import { metricsMiddleware, metricsHandler } from './utils/metrics';
 import { prisma } from './db';
 import morgan from 'morgan';
 import { attachWsServer, getStats, pushToUser, broadcastAll, pushToRole } from './services/wsServer';
@@ -72,6 +73,12 @@ setupSentryExpressHandlers(app);
 // V1.30 安全: 安全头 + 限流 (必须在 cors/parser 之前)
 app.use(helmetMiddleware);
 app.use(globalLimiter);
+
+// V1.46 Prometheus 指标采集中间件（记录所有请求的耗时/计数）
+app.use(metricsMiddleware);
+
+// V1.46 /metrics 端点（Prometheus 抓取，不走 requireAuth；建议在 nginx 层限制内网访问）
+app.get('/metrics', metricsHandler);
 
 // V1.30.3 P0-2: CORS 收紧 (生产环境限制 origin)
 app.use(cors(env.CORS_ORIGIN
@@ -182,6 +189,7 @@ app.listen(PORT, () => {
   logger.info(`🚀 AVM Backend listening at http://localhost:${PORT}`);
   logger.info(`   Health:  http://localhost:${PORT}/api/health`);
   logger.info(`   Deep:    http://localhost:${PORT}/api/health/deep`);
+  logger.info(`   Metrics: http://localhost:${PORT}/metrics`);
   logger.info(`   WS:      ws://localhost:${PORT + 1}/api/ws?token=xxx`);
   logger.info(`   Mode:    ${IS_PRODUCTION ? 'production' : 'development'}`);
 

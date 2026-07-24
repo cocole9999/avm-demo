@@ -1,0 +1,22 @@
+# Prometheus 抓取配置 (AVM 项目中心)
+# 抓取后端 /metrics 端点（metrics.ts 自实现，无需 prom-client 依赖）
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'avm-monitor'
+
+scrape_configs:
+  # AVM 后端应用指标
+  - job_name: 'avm-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['backend:4000']
+        labels:
+          service: 'avm-backend'
+          env: 'production'
+
+  # Prometheus 自身指标
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
