@@ -314,3 +314,30 @@ llmSettingsRouter.post('/test-chat', async (req, res) => {
 llmSettingsRouter.get('/_/status', async (_req, res) => {
   res.json(await getLLMStatus());
 });
+
+// V1.31: 一键按厂商切换（自动设置 primary，currentModel 取 defaultModel）
+// POST /api/llm-settings/quick-switch  body: { provider, model? }
+llmSettingsRouter.post('/quick-switch', async (req, res) => {
+  try {
+    const { provider, model } = req.body;
+    if (!provider) return res.status(400).json({ error: 'provider 必填' });
+    const meta = PROVIDERS.find(p => p.key === provider);
+    if (!meta) return res.status(404).json({ error: `未知 provider: ${provider}` });
+    const existing = await prisma.lLMSettings.findUnique({ where: { provider } });
+    const hasKey = existing?.apiKey ? !!decrypt(existing.apiKey) : false;
+    if (!existing || !hasKey) {
+      return res.status(400).json({ error: '该 provider 尚未配置 API Key，请先在配置里填入' });
+    }
+    await prisma.lLMSettings.updateMany({ where: { isPrimary: true }, data: { isPrimary: false } });
+    const newModel = model || existing.currentModel || existing.model || meta.defaultModel;
+    await prisma.lLMSettings.update({
+      where: { provider },
+      data: { isPrimary: true, enabled: true, currentModel: newModel },
+    });
+    clearLLMCache();
+    const newStatus = await getLLMStatus();
+    res.json({ ok: true, provider, model: newModel, displayName: existing.name || meta.name, status: newStatus });
+  } catch (e: any) {
+    res.status(400).json({ error: e.message });
+  }
+});

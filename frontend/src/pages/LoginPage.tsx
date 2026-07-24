@@ -11,10 +11,9 @@ import { useAuth } from '../AuthContext';
 const { Title, Text } = Typography;
 
 const DEMO_ACCOUNTS = [
-  { user: 'admin', pwd: 'admin123', label: '租户管理员', color: 'gold' },
-  { user: 'pm', pwd: 'pm123', label: '空间管理员', color: 'blue' },
-  { user: 'zhangsan', pwd: '123456', label: '业务负责人', color: 'cyan' },
-  { user: 'lisi', pwd: '123456', label: '成员', color: 'default' },
+  { user: 'admin', pwd: 'Admin@2026', label: '租户管理员', color: 'gold' },
+  { user: 'pm', pwd: 'Pm2026!!', label: '空间管理员', color: 'blue' },
+  { user: 'zhangsan', pwd: 'User@2026', label: '普通成员', color: 'cyan' },
 ];
 
 export function LoginPage() {

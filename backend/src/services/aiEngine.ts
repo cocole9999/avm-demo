@@ -1,4 +1,4 @@
-﻿﻿﻿﻿/**
+﻿﻿﻿/**
  * AI 引擎（启发式实现）
  * 演示版本不依赖外部 LLM API，使用基于规则和历史数据的启发式算法
  * 真实生产环境可对接：
@@ -416,6 +416,7 @@ function extractKeywords(text: string): string[] {
 // LLM 不可用 / 失败时静默返回原结果。
 import { getLLMProvider, getLLMStatus } from './llmProvider';
 import { buildProjectSnapshot } from './projectSnapshot';
+import { loadWikiKnowledge } from './wikiKnowledge';
 
 export function llmStatus() {
   return getLLMStatus();
@@ -447,11 +448,13 @@ export async function enhanceWithLLM(
   try {
     // 拉项目快照（5 分钟缓存），让 LLM 基于真实数据推理
     const snapshot = await getProjectSnapshotText();
+    // 拉 wiki 知识（5 分钟缓存），让 LLM 掌握 AVM 的概念/实体/账号/能力
+    const wiki = loadWikiKnowledge();
     const messages: any[] = [];
-    // system prompt 顺序：项目快照（最权威） → 本次上下文（特定子任务） → 严格指令
+    // system prompt 顺序：Wiki 知识（产品概念） → 项目快照（业务数据） → 本次上下文 → 严格指令
     messages.push({
       role: 'system',
-      content: `${snapshot}\n\n你是一位资深 AVM 项目管理专家。基于上面的【项目快照】和【本次数据上下文】回答用户问题。\n\n严格规则：\n1. 只能使用项目快照和本次上下文中的真实数据\n2. 不在数据中的字段（合同额/进度/风险/UPL 等），必须明确说"数据中没有 X 信息"\n3. 严禁编造项目、客户、车型、合同额、联系人姓名等任何数据\n4. 回答简洁专业，给出风险点 / 建议 / 责任人建议`,
+      content: `${wiki.text}\n\n---\n\n${snapshot}\n\n你是一位资深 AVM 项目管理专家。基于上面的【AVM 知识库】、【项目快照】和【本次数据上下文】回答用户问题。\n\n严格规则：\n1. 优先使用知识库中的术语、概念、角色、流程定义回答\n2. 业务数据（项目/客户/车型/合同/联系人/工作项）只能使用项目快照中的真实数据\n3. 不在数据中的字段（合同额/进度/风险/UPL 等），必须明确说"数据中没有 X 信息"\n4. 严禁编造项目、客户、车型、合同额、联系人姓名等任何数据\n5. 回答简洁专业，给出风险点 / 建议 / 责任人建议\n6. 如用户问登录账号或权限问题，参考知识库中的"演示账号"与"权限模型"\n7. 如用户问 AI/自动化/MCP 能力，参考知识库中的"AI能力"/"MCP"/"自动化工作流"`,
     });
     if (context) {
       messages.push({ role: 'system', content: `本次数据上下文：\n${context}` });

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Card, Input, Button, Space, Avatar, Tabs, Tag, Form, Select, message, List, Empty, Spin,
   Modal, Statistic, Row, Col, Alert, Button as AntButton, Tooltip,
@@ -10,6 +10,7 @@ import {
 import { aiApi, llmSettingsApi, metaApi } from '../api';
 import type { AIFieldConfig } from '../types';
 import { Link } from 'react-router-dom';
+import { MarkdownContent } from '../components/MarkdownContent';
 
 interface ChatMessage {
   role: 'user' | 'ai';
@@ -27,6 +28,7 @@ export function AIPage() {
   const [llmStatus, setLlmStatus] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
   const [activeProviders, setActiveProviders] = useState<any[]>([]);
+  const [allProviders, setAllProviders] = useState<any[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'ai',
@@ -52,9 +54,12 @@ export function AIPage() {
     metaApi.stats().then(setStats).catch(() => {});
   }, []);
 
-  // 拉已配置的 provider 列表（用于顶部"切换厂商"下拉）
+  // 拉所有 provider 列表（用于顶部"切换厂商"下拉，含未配置的）
   useEffect(() => {
-    const load = () => llmSettingsApi.list().then(r => setActiveProviders(r.activeProviders || [])).catch(() => {});
+    const load = () => llmSettingsApi.list().then(r => {
+      setActiveProviders(r.activeProviders || []);
+      setAllProviders(r.providers || []);
+    }).catch(() => {});
     load();
     const handler = () => load();
     window.addEventListener('llm-status-updated', handler);
@@ -94,18 +99,13 @@ export function AIPage() {
           <span style={{ fontSize: 16, fontWeight: 500 }}>AI 智能助理</span>
           {llmStatus?.configured ? (
             <>
-              {activeProviders.length > 1 ? (
-                <>
-                  <span style={{ fontSize: 12, color: '#666' }}>厂商</span>
-                  <ProviderSwitcher
-                    current={llmStatus.provider}
-                    activeProviders={activeProviders}
-                    onChanged={(newStatus) => setLlmStatus(newStatus)}
-                  />
-                </>
-              ) : (
-                <Tag color="purple">{llmStatus.displayName || llmStatus.provider}</Tag>
-              )}
+              <span style={{ fontSize: 12, color: '#666' }}>厂商</span>
+              <ProviderSwitcher
+                current={llmStatus.provider}
+                providers={allProviders}
+                activeProviders={activeProviders}
+                onChanged={(newStatus) => setLlmStatus(newStatus)}
+              />
               <span style={{ fontSize: 12, color: '#666' }}>模型</span>
               <ModelSwitcher
                 provider={llmStatus.provider}
@@ -176,8 +176,8 @@ export function AIPage() {
 function ChatTab({ messages, setMessages, input, setInput, loading, handleSend }: any) {
   const userRowStyle: React.CSSProperties = { marginBottom: 16, display: 'flex', gap: 8, flexDirection: 'row-reverse' };
   const aiRowStyle: React.CSSProperties = { marginBottom: 16, display: 'flex', gap: 8, flexDirection: 'row' };
-  const userBubbleStyle: React.CSSProperties = { maxWidth: '70%', background: '#1677ff', color: '#fff', padding: '8px 12px', borderRadius: 8, fontSize: 13, whiteSpace: 'pre-wrap' };
-  const aiBubbleStyle: React.CSSProperties = { maxWidth: '70%', background: '#fafafa', color: '#333', padding: '8px 12px', borderRadius: 8, fontSize: 13, whiteSpace: 'pre-wrap' };
+  const userBubbleStyle: React.CSSProperties = { maxWidth: '70%', background: '#1677ff', color: '#fff', padding: '8px 12px', borderRadius: 8, fontSize: 13 };
+  const aiBubbleStyle: React.CSSProperties = { maxWidth: '70%', background: '#fafafa', color: '#333', padding: '8px 12px', borderRadius: 8, fontSize: 13 };
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 12 }}>
@@ -193,13 +193,17 @@ function ChatTab({ messages, setMessages, input, setInput, loading, handleSend }
                     {m.llmEnhanced && <Tag color="green" style={{ marginLeft: 4, fontSize: 10 }}>LLM 增强</Tag>}
                   </div>
                 )}
-                {m.content}
+                {m.role === 'user' ? (
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                ) : (
+                  <MarkdownContent content={m.content} />
+                )}
                 {m.llmInsight && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #d9b3ff' }}>
                     <div style={{ fontSize: 11, color: '#722ed1', marginBottom: 4 }}>
                       🤖 LLM 深度解读{m.llmModel ? ` (${m.llmModel})` : ''}
                     </div>
-                    <div style={{ fontSize: 13, color: '#333' }}>{m.llmInsight}</div>
+                    <MarkdownContent content={m.llmInsight} style={{ fontSize: 13, color: '#333' }} />
                   </div>
                 )}
                 {m.suggestions && m.suggestions.length > 0 && (
@@ -596,17 +600,23 @@ function ModelSwitcher({ provider, models, current, onChanged }: {
   );
 }
 
-// 厂商切换器：在已配置的 provider 之间切换（deepseek / openai / qwen / glm 等）
-function ProviderSwitcher({ current, activeProviders, onChanged }: {
+// 厂商切换器：列出所有支持的 provider；未配置的点击时提示去配置
+function ProviderSwitcher({ current, providers, activeProviders, onChanged }: {
   current: string;
-  activeProviders: { key: string; name: string; logo?: string; model?: string; isPrimary?: boolean }[];
+  providers: { key: string; name: string; logo?: string }[];
+  activeProviders: { key: string }[];
   onChanged: (status: any) => void;
 }) {
   const [switching, setSwitching] = useState(false);
-  if (!activeProviders || activeProviders.length === 0) return null;
+  if (!providers) providers = [];
 
   const switchTo = async (key: string) => {
     if (!key || key === current) return;
+    const configured = activeProviders.find(p => p.key === key);
+    if (!configured) {
+      message.warning(`厂商 ${key} 尚未配置 API Key，请先在 LLM 设置页配置`);
+      return;
+    }
     setSwitching(true);
     try {
       const r = await llmSettingsApi.activateProvider(key);
@@ -624,10 +634,11 @@ function ProviderSwitcher({ current, activeProviders, onChanged }: {
       loading={switching}
       onChange={switchTo}
       placeholder="切换厂商"
+      disabled={providers.length === 0}
     >
-      {activeProviders.map(p => (
+      {providers.map(p => (
         <Select.Option key={p.key} value={p.key}>
-          {p.logo} {p.name} {p.isPrimary ? '★' : ''}
+          {p.key}
         </Select.Option>
       ))}
     </Select>

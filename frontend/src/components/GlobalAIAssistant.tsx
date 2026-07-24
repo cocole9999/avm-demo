@@ -8,10 +8,11 @@
  * - 多轮对话记忆（sessionStorage 持久化 + 后端 history 注入）
  */
 import { useEffect, useState, useRef } from 'react';
-import { FloatButton, Drawer, Input, Button, Space, Tag, Spin, message as antdMessage, Avatar, Empty, Tooltip, Popconfirm, Badge } from 'antd';
-import { RobotOutlined, SendOutlined, CloseOutlined, ThunderboltOutlined, ClearOutlined, HistoryOutlined } from '@ant-design/icons';
+import { FloatButton, Drawer, Input, Button, Space, Tag, Spin, message as antdMessage, Avatar, Empty, Tooltip, Popconfirm, Badge, Select } from 'antd';
+import { RobotOutlined, SendOutlined, CloseOutlined, ThunderboltOutlined, ClearOutlined, HistoryOutlined, SwapOutlined } from '@ant-design/icons';
 import { useAuth } from '../AuthContext';
-import { api } from '../api';
+import { api, llmSettingsApi } from '../api';
+import { MarkdownContent } from './MarkdownContent';
 
 interface Message {
   id: string;
@@ -95,6 +96,71 @@ export function GlobalAIAssistant() {
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // V1.31: LLM 状态（当前厂商 / 模型 / 候选模型）
+  const [llmStatus, setLlmStatus] = useState<any>(null);
+  const [modelsByProvider, setModelsByProvider] = useState<Record<string, string[]>>({});
+  const [activeProviders, setActiveProviders] = useState<{ key: string; name: string; logo?: string; model?: string; isPrimary?: boolean }[]>([]);
+  const [allProviders, setAllProviders] = useState<{ key: string; name: string; logo?: string }[]>([]);
+  const [switchingModel, setSwitchingModel] = useState(false);
+  const [switchingProvider, setSwitchingProvider] = useState(false);
+
+  const refreshLlm = async () => {
+    try {
+      const r: any = await llmSettingsApi.list();
+      const st = r?.status || null;
+      setLlmStatus(st);
+      setActiveProviders(r?.activeProviders || []);
+      setAllProviders((r?.providers || []).map((p: any) => ({ key: p.key, name: p.name, logo: p.logo })));
+      const configured = (r?.settings || []).filter((s: any) => s.apiKey && s.apiKey.length > 4);
+      const map: Record<string, string[]> = {};
+      await Promise.all(configured.map(async (s: any) => {
+        try {
+          const m: any = await llmSettingsApi.listModels(s.provider);
+          map[s.provider] = m?.builtin || [];
+        } catch { map[s.provider] = []; }
+      }));
+      setModelsByProvider(map);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (open) refreshLlm();
+    const handler = () => refreshLlm();
+    window.addEventListener('llm-status-updated', handler);
+    return () => window.removeEventListener('llm-status-updated', handler);
+  }, [open]);
+
+  // 一键切换当前 provider 的模型（每个厂商从最新 3 个候选里选）
+  const switchModel = async (model: string) => {
+    if (!llmStatus?.provider || !model || llmStatus.model === model) return;
+    setSwitchingModel(true);
+    try {
+      const r: any = await llmSettingsApi.quickSwitch(llmStatus.provider, model);
+      antdMessage.success(`已切换到 ${r.displayName}（${r.model}）`);
+      await refreshLlm();
+    } catch (e: any) { antdMessage.error(e.message); }
+    finally { setSwitchingModel(false); }
+  };
+
+  // 切换厂商（在所有支持的 provider 中选择；未配置时提示去配置）
+  const switchProvider = async (key: string) => {
+    if (!key || key === llmStatus?.provider) return;
+    const configured = activeProviders.find(p => p.key === key);
+    if (!configured) {
+      antdMessage.warning(`厂商 ${key} 尚未配置 API Key，请先在 LLM 设置页配置`);
+      return;
+    }
+    setSwitchingProvider(true);
+    try {
+      const r: any = await llmSettingsApi.activateProvider(key);
+      antdMessage.success(`已切换到 ${r.displayName}（${r.model}）`);
+      // 直接用后端返回的 status 更新，避免再调 list 命中 cache
+      if (r.status) setLlmStatus(r.status);
+      await refreshLlm();
+    } catch (e: any) { antdMessage.error(e.message); }
+    finally { setSwitchingProvider(false); }
+  };
 
   // 持久化（每次 messages 变化）
   useEffect(() => {
@@ -255,6 +321,47 @@ export function GlobalAIAssistant() {
           </div>
         }
       >
+        {/* V1.31: 模型切换条 — 厂商下拉 + 最新 3 个候选模型 */}
+        {llmStatus?.configured && (
+          <div style={{ padding: '8px 12px', background: '#f9f0ff', borderBottom: '1px solid #e8e8e8' }}>
+            <Space size={4} wrap>
+              <SwapOutlined style={{ color: '#722ed1' }} />
+              <span style={{ fontSize: 12, color: '#666' }}>AI 模型：</span>
+              <Select
+                size="small"
+                style={{ minWidth: 130 }}
+                value={llmStatus.provider}
+                loading={switchingProvider}
+                onChange={switchProvider}
+                placeholder="切换厂商"
+                disabled={allProviders.length === 0}
+                options={allProviders.map(p => ({ value: p.key, label: p.key }))}
+              />
+              <Select
+                size="small"
+                style={{ minWidth: 200 }}
+                value={llmStatus.model}
+                loading={switchingModel}
+                onChange={switchModel}
+                placeholder="选择模型"
+                options={(modelsByProvider[llmStatus.provider] || []).map(m => ({
+                  value: m,
+                  label: `${m}${m === llmStatus.model ? ' ★' : ''}`,
+                }))}
+              />
+              <Tooltip title="去 LLM 设置页管理厂商与自定义模型">
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() => { window.open('/llm-settings', '_blank'); }}
+                >
+                  管理
+                </Button>
+              </Tooltip>
+            </Space>
+          </div>
+        )}
+
         {/* 快捷建议：只在新会话（≤1 轮）时显示 */}
         {messages.filter(m => m.role === 'user').length === 0 && suggestions.length > 0 && (
           <div style={{ padding: 12, background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
@@ -287,10 +394,13 @@ export function GlobalAIAssistant() {
                 padding: '8px 12px',
                 borderRadius: 8,
                 fontSize: 13,
-                whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
               }}>
-                {m.content}
+                {m.role === 'user' ? (
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                ) : (
+                  <MarkdownContent content={m.content} />
+                )}
                 {m.toolCalls && m.toolCalls.length > 0 && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #d9b3ff' }}>
                     <div style={{ fontSize: 11, color: '#722ed1', marginBottom: 4 }}>🔧 工具调用：</div>
@@ -308,7 +418,9 @@ export function GlobalAIAssistant() {
           ))}
           {loading && (
             <div style={{ textAlign: 'center', padding: 16 }}>
-              <Spin tip="AI 思考中..." />
+              <Spin tip="AI 思考中...">
+                <div style={{ minHeight: 60 }} />
+              </Spin>
             </div>
           )}
         </div>

@@ -183,7 +183,7 @@ export function LLMSettingsPage() {
         </Row>
 
         <Table
-          rowKey="provider" loading={loading} pagination={false}
+          rowKey="key" loading={loading} pagination={false}
           dataSource={providers}
           columns={[
             {

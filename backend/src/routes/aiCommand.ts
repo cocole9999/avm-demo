@@ -7,11 +7,18 @@
 import { Router } from 'express';
 import { getLLMProvider, clearLLMCache } from '../services/llmProvider';
 import { buildProjectSnapshot } from '../services/projectSnapshot';
+import { loadWikiKnowledge } from '../services/wikiKnowledge';
 import { toolsToOpenAIFormat, executeTool } from '../services/aiTools';
 import { prisma } from '../db';
 import { runRiskScan, startRiskScanner } from '../services/riskScanner';
 import { actorFromReq } from '../utils/audit';
 import { TYPE_PREFIX } from '../constants';
+
+// V1.31: Wiki 知识（5 分钟缓存复用） + 项目快照 = 让 LLM 掌握 AVM 全部信息
+function buildSystemContext(extra: string = ''): string {
+  const wiki = loadWikiKnowledge();
+  return `${wiki.text}\n\n---\n\n${extra}`;
+}
 
 export const aiCommandRouter = Router();
 
@@ -51,13 +58,16 @@ aiCommandRouter.post('/command', async (req, res) => {
 
     // 拉项目快照（5 分钟缓存）让 LLM 知道有哪些项目/客户
     const snapshot = await buildProjectSnapshot();
+    // V1.31: 把 Wiki 知识库（产品概念、角色、流程、术语）也注入 system prompt，让 LLM 掌握 AVM 全部信息
+    const wiki = loadWikiKnowledge();
 
     // 工具列表
     const tools = toolsToOpenAIFormat();
     const messages: any[] = [
       {
         role: 'system',
-        content: `${snapshot.text}\n\n你是一位 AVM 项目管理专家。用户会用自然语言给你命令，你需要用提供的工具来执行操作。\n\n规则：\n1. 必须基于项目快照和工具返回的真实数据回答\n2. 调用工具前先想清楚要哪些参数；可以并行调用多个工具\n3. 工具调用结果要简洁总结给用户\n4. 数据中没有的字段必须明确说"数据中没有"\n5. 严禁编造项目/客户/合同额/联系人等任何数据\n6. 多轮对话时记住上文提到的项目/工作项/客户名，回复中可以直接引用简称`,
+        content: `${wiki.text}\n\n---\n\n${snapshot.text}\n\n你是一位 AVM 项目管理专家。用户会用自然语言给你命令，你需要用提供的工具来执行操作。\n\n规则：\n1. 必须基于项目快照和工具返回的真实数据回答\n2. 优先使用知识库中的术语、概念、角色、流程定义回答\n3. 调用工具前先想清楚要哪些参数；可以并行调用多个工具\n4. 工具调用结果要简洁总结给用户\n5. 数据中没有的字段必须明确说"数据中没有"\n6. 严禁编造项目/客户/合同额/联系人等任何数据\n7. 多轮对话时记住上文提到的项目/工作项/客户名，回复中可以直接引用简称\n8. 如用户问登录账号/权限/AI能力/MCP 等，参考知识库中的对应条目
+9. 当用户问"外部依赖"、"台架"、"实车"、"车模"、"SDB"、"UE"、"UI"、"标定"是否就绪/准备好时，必须调用 list_external_dependencies 工具获取真实数据`,
       },
     ];
     if (context) {
@@ -231,7 +241,8 @@ aiCommandRouter.post('/fill-work-item', async (req, res) => {
 
     // 拉项目快照（项目/客户/车型/人员）
     const snapshot = await buildProjectSnapshot();
-
+    // V1.31: 注入 wiki 让 LLM 掌握 AVM 概念与术语
+    const wiki = loadWikiKnowledge();
     // 同时查人员清单（assignee 候选）
     const users = await prisma.user.findMany({ select: { displayName: true, username: true, role: true, department: true } });
     const userList = users.map(u => `${u.displayName} (${u.role}, ${u.department || '未填'})`).join('、');
@@ -257,7 +268,7 @@ aiCommandRouter.post('/fill-work-item', async (req, res) => {
 5. description 用中文`;
 
     const r = await provider.chat([
-      { role: 'system', content: `${snapshot.text}\n\n【人员清单】\n${userList}\n\n你只返回 JSON，不要其他文字。` },
+      { role: 'system', content: `${wiki.text}\n\n---\n\n${snapshot.text}\n\n【人员清单】\n${userList}\n\n你只返回 JSON，不要其他文字。` },
       { role: 'user', content: prompt },
     ], { temperature: 0.3, maxTokens: 1000 });
 
@@ -314,6 +325,9 @@ aiCommandRouter.post('/suggest-assignee', async (req, res) => {
       return res.status(400).json({ error: 'LLM 未配置' });
     }
 
+    // V1.31: 注入 wiki 让 LLM 掌握 AVM 概念与术语
+    const wiki = loadWikiKnowledge();
+
     // 查历史工作项（最近 30 天）按 assignee 统计
     const since = new Date(Date.now() - 30 * 86400000);
     const items = await prisma.workItem.findMany({
@@ -359,7 +373,7 @@ ${userList}
 3. assignee 必须精确匹配人员清单`;
 
     const r = await provider.chat([
-      { role: 'system', content: '你只返回 JSON，不要其他文字。' },
+      { role: 'system', content: `${wiki.text}\n\n---\n\n你只返回 JSON，不要其他文字。` },
       { role: 'user', content: prompt },
     ], { temperature: 0.3, maxTokens: 1500 });
 
@@ -515,6 +529,8 @@ aiCommandRouter.post('/fill-form', async (req, res) => {
 
     // 拉快照
     const snapshot = cfg.buildSnapshot ? await buildProjectSnapshot() : null;
+    // V1.31: 注入 wiki 让 LLM 掌握 AVM 概念与术语
+    const wiki = loadWikiKnowledge();
     // 拉人员清单（PM/负责人可能用）
     const users = await prisma.user.findMany({ select: { displayName: true, role: true, department: true } });
     const userList = users.map(u => `${u.displayName} (${u.role}, ${u.department || '未填'})`).join('、');
@@ -539,7 +555,7 @@ ${cfg.rule}
 7. 不在数据中的字段必须填 null 或空字符串`;
 
     const r = await provider.chat([
-      { role: 'system', content: '你只返回 JSON，不要其他文字。' },
+      { role: 'system', content: `${wiki.text}\n\n---\n\n${snapshot ? snapshot.text + '\n\n' : ''}【人员清单】\n${userList}\n\n你只返回 JSON，不要其他文字。` },
       { role: 'user', content: prompt },
     ], { temperature: 0.3, maxTokens: 1200 });
 
@@ -784,7 +800,7 @@ ${dataSummary}
 请生成周报（直接输出 Markdown，不要其他文字）：`;
 
     const r = await provider.chat([
-      { role: 'system', content: '你是 AVM 项目管理专家，输出专业的项目周报。用中文。直接输出 Markdown，不要其他文字。' },
+      { role: 'system', content: `${loadWikiKnowledge().text}\n\n---\n\n你是 AVM 项目管理专家，输出专业的项目周报。用中文。直接输出 Markdown，不要其他文字。` },
       { role: 'user', content: prompt },
     ], { temperature: 0.3, maxTokens: 3000 });
     finalReport = r.content;

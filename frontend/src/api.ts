@@ -27,7 +27,7 @@ export type {
 
 export const api = axios.create({
   baseURL: '/api',
-  timeout: 15000,
+  timeout: 60000,
 });
 
 // V1.30.3 P0-8: axios 拦截器 — 自动注入 token + 401 跳登录
@@ -386,9 +386,11 @@ export const llmSettingsApi = {
   test: (provider: string, data: AnyData) => api.post<{ ok: boolean; message: string; success?: boolean; latencyMs?: number }>(`/llm-settings/${provider}/test`, data).then(r => r.data),
   setPrimary: (provider: string) => api.post<{ ok: boolean }>(`/llm-settings/${provider}/primary`).then(r => r.data),
   testChat: (data: AnyData) => api.post<{ ok: boolean; response: string; success?: boolean; latencyMs?: number; message?: string }>(`/llm-settings/test-chat`, data).then(r => r.data),
-  listModels: (provider: string) => api.get<{ builtin: string[]; custom: string[]; current: string; all: string[] }>(`/llm-settings/${provider}/models`).then(r => r.data),
+  listModels: (provider: string) => api.get<{ builtin: string[]; builtinAll: string[]; custom: string[]; current: string; all: string[] }>(`/llm-settings/${provider}/models`).then(r => r.data),
   switchModel: (provider: string, model: string) => api.post<{ ok: boolean; model: string; provider: string; currentModel: string; displayName: string; status: Record<string, unknown> }>(`/llm-settings/${provider}/switch-model`, { model }).then(r => r.data),
   activateProvider: (provider: string) => api.post<{ ok: boolean; provider: string; displayName: string; model: string; status: Record<string, unknown> }>(`/llm-settings/${provider}/activate`, {}).then(r => r.data),
+  // V1.31: 一键厂商+模型切换（自动设主 provider、currentModel）
+  quickSwitch: (provider: string, model?: string) => api.post<{ ok: boolean; provider: string; model: string; displayName: string; status: Record<string, unknown> }>(`/llm-settings/quick-switch`, { provider, ...(model ? { model } : {}) }).then(r => r.data),
   addCustomModel: (provider: string, model: string) => api.post<{ ok: boolean }>(`/llm-settings/${provider}/custom-models`, { model }).then(r => r.data),
   removeCustomModel: (provider: string, model: string) => api.delete<{ ok: boolean }>(`/llm-settings/${provider}/custom-models/${encodeURIComponent(model)}`).then(r => r.data),
 };

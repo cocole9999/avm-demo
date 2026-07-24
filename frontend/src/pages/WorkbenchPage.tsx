@@ -55,7 +55,13 @@ export function WorkbenchPage({ userId }: Props) {
   }, [userId]);
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center' }}><Spin tip="加载工作台..." /></div>;
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <Spin tip="加载工作台...">
+          <div style={{ minHeight: 80 }} />
+        </Spin>
+      </div>
+    );
   }
   if (!data) {
     return <Empty description="暂无数据" />;

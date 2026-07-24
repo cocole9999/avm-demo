@@ -60,7 +60,13 @@ export function AnalysisPage({ userId: _userId }: Props) {
   }
 
   if (loading && !analysis) {
-    return <div style={{ padding: 40, textAlign: 'center' }}><Spin tip="加载分析中..." /></div>;
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <Spin tip="加载分析中...">
+          <div style={{ minHeight: 80 }} />
+        </Spin>
+      </div>
+    );
   }
 
   if (!analysis) {

@@ -260,7 +260,61 @@ const updateWorkItem: ToolDefinition = {
   },
 };
 
-// ========== 工具 6: 列出工作项 ==========
+// ========== 工具 6: 列出外部依赖 ==========
+const listExternalDependencies: ToolDefinition = {
+  name: 'list_external_dependencies',
+  description: '列出外部依赖（台架/实车/车模/SDB/UE/UI/标定等）。可按 type/status/projectCode/owner 过滤。常用于"哪些外部依赖未就绪"、"标定资源准备好了吗"等。',
+  parameters: {
+    type: 'object',
+    properties: {
+      type: { type: 'string', description: '依赖类型：台架 / 实车 / 车模 / SDB / UE / UI / 标定 / 其他' },
+      status: { type: 'string', description: '状态：pending / preparing / ready / blocked / cancelled' },
+      projectCode: { type: 'string', description: '按项目编码过滤' },
+      owner: { type: 'string', description: '按负责人/提供方过滤' },
+      notReady: { type: 'boolean', description: '只看未就绪的依赖（pending/preparing/blocked），默认 false' },
+      limit: { type: 'number', description: '返回数量上限，默认 50' },
+    },
+  },
+  handler: async (args) => {
+    const where: any = {};
+    if (args.type) where.type = args.type;
+    if (args.status) where.status = args.status;
+    if (args.owner) where.owner = { contains: args.owner };
+    if (args.projectCode) {
+      const p = await prisma.project.findUnique({ where: { code: args.projectCode } });
+      if (p) where.projectId = p.id;
+    }
+    if (args.notReady) {
+      where.status = { in: ['pending', 'preparing', 'blocked'] };
+    }
+    const list = await prisma.externalDependency.findMany({
+      where,
+      take: Math.min(args.limit || 50, 100),
+      include: {
+        project: { select: { id: true, code: true, name: true } },
+        workItem: { select: { id: true, key: true, title: true, status: true } },
+      },
+      orderBy: [{ status: 'asc' }, { expectedDate: 'asc' }],
+    });
+    const today = new Date();
+    return list.map(d => ({
+      id: d.id,
+      type: d.type,
+      name: d.name,
+      description: d.description,
+      status: d.status,
+      owner: d.owner,
+      expectedDate: d.expectedDate,
+      actualDate: d.actualDate,
+      blocker: d.blocker,
+      project: d.project,
+      workItem: d.workItem,
+      overdue: d.expectedDate && new Date(d.expectedDate) < today && d.status !== 'ready' && d.status !== 'cancelled',
+    }));
+  },
+};
+
+// ========== 工具 7: 列出工作项 ==========
 const listWorkItems: ToolDefinition = {
   name: 'list_work_items',
   description: '列出/查询工作项。可按 type/priority/status/project/assignee 过滤。常用于"列出所有 P0 缺陷"等。',
@@ -348,7 +402,7 @@ const listContacts: ToolDefinition = {
 export const TOOLS: ToolDefinition[] = [
   // 8 个核心工具 (V1.8): 查询 + 工作项 CRUD
   listProjects, getProject, scanRisks,
-  createWorkItem, updateWorkItem, listWorkItems,
+  createWorkItem, updateWorkItem, listExternalDependencies, listWorkItems,
   listCustomers, listContacts,
   // 18 个扩展工具 (V1.8.1): 全量实体 CRUD
   createProject, updateProject, deleteProject,
