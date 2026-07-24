@@ -46,9 +46,13 @@ import { requireAuth } from './middleware/auth';
 import { auditLogRouter } from './routes/auditLogs';
 import { mentionRouter } from './routes/mentions';
 import { uploadRouter } from './routes/uploads';
+import { fileUploadRouter } from './routes/upload';
 import { healthRouter } from './routes/health';
 import { helmetMiddleware, globalLimiter } from './middleware/security';
+import { csrfProtection, getCsrfToken } from './middleware/csrf';
+import { agentRouter } from './routes/agent';
 import { logger } from './utils/logger';
+import { prisma } from './db';
 import morgan from 'morgan';
 import { attachWsServer, getStats, pushToUser, broadcastAll, pushToRole } from './services/wsServer';
 import http from 'http';
@@ -74,7 +78,7 @@ app.use(cors(env.CORS_ORIGIN
   ? { origin: env.CORS_ORIGIN.split(',').map(s => s.trim()), credentials: true }
   : undefined  // 开发模式不限制
 ));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
 
 // V1.30 结构化访问日志
 app.use(morgan(IS_PRODUCTION
@@ -99,6 +103,14 @@ app.use('/api', healthRouter);
 //   - 生产模式无 token 401
 app.use('/api', requireAuth);
 
+// V1.30.5 CSRF 保护 (可选，通过环境变量启用)
+// 注意：对于 API-first 应用（使用 JWT Bearer Token），CSRF 防护通常不是必需的
+// 本中间件为可选功能，适用于使用 Cookie 认证的场景
+if (process.env.ENABLE_CSRF_PROTECTION === 'true') {
+  app.get('/api/csrf-token', getCsrfToken);
+  app.use('/api', csrfProtection);
+}
+
 app.use('/api/work-items', workItemRouter);
 app.use('/api/iterations', iterationRouter);
 app.use('/api/comments', commentRouter);
@@ -110,6 +122,7 @@ app.use('/api/charts', chartRouter);
 app.use('/api/dashboards', dashboardRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/ai-command', aiCommandRouter);
+app.use('/api/agent', agentRouter);
 app.use('/api/export', exportRouter);
 app.use('/api/dependencies', dependencyRouter);
 app.use('/api/users', userRouter);
@@ -139,6 +152,7 @@ app.use('/api/projects', projectRouter);
 app.use('/api/audit-logs', auditLogRouter);
 app.use('/api/mentions', mentionRouter);
 app.use('/api/uploads', uploadRouter);
+app.use('/api/upload', fileUploadRouter);
 
 // V1.30.3 P2-8: Sentry error handler（在自定义错误处理之前）
 app.use(sentryErrorHandler());
@@ -194,4 +208,34 @@ export const wsPush = {
 app.get('/api/ws/stats', requireAuth, (req: any, res) => {
   if (req.user?.role !== 'tenant_admin') return res.status(403).json({ error: 'admin only' });
   res.json(getStats());
+});
+
+// V1.30.5 稳定性优化: 全局错误处理
+process.on('uncaughtException', (err) => {
+  logger.error('未捕获的异常:', err);
+  captureException(err, { extra: { source: 'uncaughtException' } });
+  alertOnServerError(err);
+  // 给 Sentry 时间发送错误
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('未处理的 Promise 拒绝:', reason);
+  captureException(reason instanceof Error ? reason : new Error(String(reason)), { 
+    source: 'unhandledRejection',
+    promise: String(promise)
+  });
+});
+
+// 优雅关闭
+process.on('SIGTERM', async () => {
+  logger.info('收到 SIGTERM 信号，开始优雅关闭...');
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  logger.info('收到 SIGINT 信号，开始优雅关闭...');
+  await prisma.$disconnect();
+  process.exit(0);
 });

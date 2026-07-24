@@ -106,7 +106,7 @@ export function ResourcesPage() {
 
   return (
     <div>
-      <Card style={{ marginBottom: 16 }} bodyStyle={{ padding: 16 }}>
+      <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 16 } }}>
         <Space wrap size="middle" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space wrap>
             <Segmented

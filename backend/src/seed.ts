@@ -26,6 +26,11 @@ function daysFromNow(days: number): Date {
 }
 
 async function main() {
+  // P1 商用加固：生产环境禁止运行 seed，防止误清空数据
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('🚫 生产环境禁止运行 seed 脚本，该脚本会清空所有数据');
+  }
+
   console.log('🌱 开始初始化演示数据（V1.7 吉利 AVM 集成项目真实场景）...');
 
   // 清空现有数据（按依赖顺序）

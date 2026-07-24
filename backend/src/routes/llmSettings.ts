@@ -14,6 +14,9 @@ import { Router } from 'express';
 import { prisma } from '../db';
 import { PROVIDERS, getLLMStatus, testProvider, clearLLMCache, OpenAICompatibleProvider, AnthropicProvider, getAvailableModels } from '../services/llmProvider';
 import { encrypt, decrypt, maskKey } from '../utils/crypto';
+import { requireRole } from '../middleware/auth';
+import { recordAudit, actorFromReq } from '../utils/audit';
+import { validateBody, llmSettingsSchema } from '../utils/validation';
 
 export const llmSettingsRouter = Router();
 
@@ -35,6 +38,7 @@ llmSettingsRouter.get('/', async (_req, res) => {
         enabled: s.enabled,
         isPrimary: s.isPrimary,
         protocol: meta?.protocol,
+        capabilities: meta?.capabilities || { vision: false, file: false },
       };
     })
     .sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
@@ -47,8 +51,8 @@ llmSettingsRouter.get('/:provider', async (req, res) => {
   res.json({ ...s, apiKey: s.apiKey ? maskKey(decrypt(s.apiKey)) : '' });
 });
 
-// 创建 / 更新（upsert）
-llmSettingsRouter.put('/:provider', async (req, res) => {
+// 创建 / 更新（upsert）— P1-1: 仅 tenant_admin 可操作
+llmSettingsRouter.put('/:provider', requireRole('tenant_admin'), validateBody(llmSettingsSchema), async (req, res) => {
   try {
     const { name, baseUrl, apiKey, model, temperature, maxTokens, enabled, isPrimary, note, extra, customModels, currentModel } = req.body;
     const meta = PROVIDERS.find(p => p.key === req.params.provider);
@@ -95,19 +99,21 @@ llmSettingsRouter.put('/:provider', async (req, res) => {
       },
     });
     clearLLMCache();
+    recordAudit('ai', req.params.provider, 'update', null, { summary: `更新 LLM 配置: ${req.params.provider}` }, actorFromReq(req));
     res.json({ ...s, apiKey: s.apiKey ? maskKey(decrypt(s.apiKey)) : '' });
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
 });
 
-llmSettingsRouter.delete('/:provider', async (req, res) => {
+llmSettingsRouter.delete('/:provider', requireRole('tenant_admin'), async (req, res) => {
   await prisma.lLMSettings.delete({ where: { provider: req.params.provider } }).catch(() => {});
   clearLLMCache();
+  recordAudit('ai', req.params.provider, 'delete', null, { summary: `删除 LLM 配置: ${req.params.provider}` }, actorFromReq(req));
   res.status(204).end();
 });
 
-llmSettingsRouter.post('/:provider/test', async (req, res) => {
+llmSettingsRouter.post('/:provider/test', requireRole('tenant_admin'), async (req, res) => {
   const meta = PROVIDERS.find(p => p.key === req.params.provider);
   if (!meta) return res.status(400).json({ error: `未知 provider: ${req.params.provider}` });
   // 优先用请求体传入的（测试新值），fallback 到 DB
@@ -136,7 +142,7 @@ llmSettingsRouter.post('/:provider/test', async (req, res) => {
   res.json(result);
 });
 
-llmSettingsRouter.post('/:provider/primary', async (req, res) => {
+llmSettingsRouter.post('/:provider/primary', requireRole('tenant_admin'), async (req, res) => {
   const meta = PROVIDERS.find(p => p.key === req.params.provider);
   if (!meta) return res.status(404).json({ error: `未知 provider: ${req.params.provider}` });
   await prisma.lLMSettings.updateMany({ where: { isPrimary: true }, data: { isPrimary: false } });
@@ -150,7 +156,7 @@ llmSettingsRouter.post('/:provider/primary', async (req, res) => {
 });
 
 // 切换当前模型（运行时立刻生效；如未配置则自动建空记录 + 标记主 provider）
-llmSettingsRouter.post('/:provider/switch-model', async (req, res) => {
+llmSettingsRouter.post('/:provider/switch-model', requireRole('tenant_admin'), async (req, res) => {
   try {
     const { model, markPrimary } = req.body;
     if (!model) return res.status(400).json({ error: 'model 必填' });
@@ -195,7 +201,7 @@ llmSettingsRouter.post('/:provider/switch-model', async (req, res) => {
 
 // 激活 provider（设为 primary + enabled；如果还没 currentModel 则取 defaultModel）
 // 用于在多个已配置的 provider 之间切换（"换厂商"）
-llmSettingsRouter.post('/:provider/activate', async (req, res) => {
+llmSettingsRouter.post('/:provider/activate', requireRole('tenant_admin'), async (req, res) => {
   try {
     const meta = PROVIDERS.find(p => p.key === req.params.provider);
     if (!meta) return res.status(404).json({ error: `未知 provider: ${req.params.provider}` });
@@ -233,7 +239,7 @@ llmSettingsRouter.get('/:provider/models', async (req, res) => {
 });
 
 // 添加自定义模型（如未配置则建空记录）
-llmSettingsRouter.post('/:provider/custom-models', async (req, res) => {
+llmSettingsRouter.post('/:provider/custom-models', requireRole('tenant_admin'), async (req, res) => {
   try {
     const { model } = req.body;
     if (!model) return res.status(400).json({ error: 'model 必填' });
@@ -259,7 +265,7 @@ llmSettingsRouter.post('/:provider/custom-models', async (req, res) => {
 });
 
 // 删除自定义模型
-llmSettingsRouter.delete('/:provider/custom-models/:model', async (req, res) => {
+llmSettingsRouter.delete('/:provider/custom-models/:model', requireRole('tenant_admin'), async (req, res) => {
   const s = await prisma.lLMSettings.findUnique({ where: { provider: req.params.provider } });
   if (!s) return res.status(204).end();
   let custom: string[] = [];
@@ -270,7 +276,7 @@ llmSettingsRouter.delete('/:provider/custom-models/:model', async (req, res) => 
   res.json({ ok: true, customModels: custom });
 });
 
-llmSettingsRouter.post('/test-chat', async (req, res) => {
+llmSettingsRouter.post('/test-chat', requireRole('tenant_admin'), async (req, res) => {
   try {
     const { provider, prompt, apiKey, baseUrl, model } = req.body;
     const meta = PROVIDERS.find(p => p.key === provider);
@@ -317,7 +323,7 @@ llmSettingsRouter.get('/_/status', async (_req, res) => {
 
 // V1.31: 一键按厂商切换（自动设置 primary，currentModel 取 defaultModel）
 // POST /api/llm-settings/quick-switch  body: { provider, model? }
-llmSettingsRouter.post('/quick-switch', async (req, res) => {
+llmSettingsRouter.post('/quick-switch', requireRole('tenant_admin'), async (req, res) => {
   try {
     const { provider, model } = req.body;
     if (!provider) return res.status(400).json({ error: 'provider 必填' });
@@ -335,6 +341,7 @@ llmSettingsRouter.post('/quick-switch', async (req, res) => {
       data: { isPrimary: true, enabled: true, currentModel: newModel },
     });
     clearLLMCache();
+    recordAudit('ai', provider, 'update', null, { summary: `切换 LLM: ${provider} → ${newModel}` }, actorFromReq(req));
     const newStatus = await getLLMStatus();
     res.json({ ok: true, provider, model: newModel, displayName: existing.name || meta.name, status: newStatus });
   } catch (e: any) {

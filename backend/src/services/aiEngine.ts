@@ -460,7 +460,7 @@ export async function enhanceWithLLM(
       messages.push({ role: 'system', content: `本次数据上下文：\n${context}` });
     }
     messages.push({ role: 'user', content: prompt });
-    const r = await provider.chat(messages, { temperature: 0.3, maxTokens: 800 });
+    const r = await provider.chat(messages, { temperature: 0.3, maxTokens: 4096 });
     // LLM 增强成功：用 LLM 输出作为主回答（answer 字段），避免前端显示"基础版+LLM 版"重复
     // - 保留 baseResult.answer 作为 llmInsight 字段（如果不同），让"基础 vs LLM 增强"可对比
     const llmOutput = (r.content || '').trim();

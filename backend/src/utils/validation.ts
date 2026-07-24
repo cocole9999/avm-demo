@@ -19,7 +19,7 @@ export const workItemCreateSchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
   carModelId: z.string().uuid().nullable().optional(),
   customerId: z.string().uuid().nullable().optional(),
-  parentId: z.string().uuid().nullable().optional(),
+  parentId: z.string().max(100).nullable().optional(),
   estimate: z.number().min(0).max(10000).nullable().optional(),
   planStart: z.coerce.date().nullable().optional(),
   planEnd: z.coerce.date().nullable().optional(),
@@ -30,6 +30,15 @@ export const workItemUpdateSchema = workItemCreateSchema.partial().extend({
   actualHours: z.number().min(0).max(10000).nullable().optional(),
   actualStart: z.coerce.date().nullable().optional(),
   actualEnd: z.coerce.date().nullable().optional(),
+  // V1.46: 允许 null 值（前端清空字段时会传 null）
+  assignee: z.string().max(50).nullable().optional(),
+  reporter: z.string().max(50).nullable().optional(),
+  module: z.string().max(100).nullable().optional(),
+  labels: z.array(z.string()).nullable().optional(),
+  title: z.string().min(1, '标题不能为空').max(200, '标题最长 200 字符').nullable().optional(),
+  description: z.string().max(10000, '描述最长 10000 字符').nullable().optional(),
+  priority: z.enum(['P0', 'P1', 'P2', 'P3']).nullable().optional(),
+  severity: z.enum(['S1', 'S2', 'S3', 'S4']).nullable().optional(),
 });
 
 // ============ 项目验证 ============
@@ -106,6 +115,103 @@ export function validateBody(schema: ZodSchema) {
         }));
         return res.status(400).json({
           error: '请求参数校验失败',
+          details: errors,
+        });
+      }
+      next(err);
+    }
+  };
+}
+
+// ============ SSO 租户验证 (P2-1) ============
+export const tenantCreateSchema = z.object({
+  code: z.string().min(1, '租户编码不能为空').max(50),
+  name: z.string().min(1, '租户名称不能为空').max(200),
+  shortName: z.string().max(50).optional(),
+  logo: z.string().max(500).optional(),
+  industry: z.string().max(100).optional(),
+  scale: z.string().max(50).optional(),
+  contact: z.string().max(100).optional(),
+  phone: z.string().max(50).optional(),
+  plan: z.enum(['free', 'standard', 'enterprise']).optional(),
+  maxUsers: z.number().int().min(1).max(100000).optional(),
+});
+
+export const tenantUpdateSchema = tenantCreateSchema.partial().omit({ code: true });
+
+// ============ SSO 配置验证 (P2-1) ============
+export const ssoSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  appId: z.string().max(200).optional(),
+  appSecret: z.string().max(500).optional(),
+  redirectUri: z.string().url('redirectUri 必须是合法 URL').max(500).optional().or(z.literal('')),
+  corpId: z.string().max(200).optional(),
+  agentId: z.string().max(200).optional(),
+  config: z.string().max(5000).optional(),
+});
+
+// ============ LLM 设置验证 (P2-1) ============
+export const llmSettingsSchema = z.object({
+  name: z.string().max(200).optional(),
+  baseUrl: z.string().max(500).optional(),
+  apiKey: z.string().max(1000).optional(),
+  model: z.string().max(200).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().min(1).max(1000000).optional(),
+  enabled: z.boolean().optional(),
+  isPrimary: z.boolean().optional(),
+  note: z.string().max(2000).optional(),
+  extra: z.string().max(5000).optional(),
+  customModels: z.array(z.string().max(200)).optional(),
+  currentModel: z.string().max(200).optional(),
+});
+
+// ============ SSO demo-login 验证 (P2-1) ============
+export const ssoDemoLoginSchema = z.object({
+  tenantId: z.string().min(1, 'tenantId 必填'),
+  openId: z.string().min(1, 'openId 必填'),
+  userName: z.string().max(100).optional(),
+  email: z.string().email('邮箱格式不正确').max(200).optional().or(z.literal('')),
+});
+
+// ============ SSO 绑定/解绑验证 (P2-1) ============
+export const ssoBindSchema = z.object({
+  provider: z.enum(['feishu', 'dingtalk', 'wechatwork']),
+  openId: z.string().min(1, 'openId 必填'),
+});
+
+// ============ 数据导出 query 验证 (P2-1) ============
+// GET /api/export/work-items?format=xlsx&type=...&status=...&priority=...&assignee=...&projectCode=...&customerCode=...&keyword=...
+export const exportWorkItemsSchema = z.object({
+  format: z.enum(['xlsx', 'csv']).optional(),
+  type: z.string().max(50).optional(),
+  status: z.string().max(50).optional(),
+  priority: z.string().max(10).optional(),
+  assignee: z.string().max(100).optional(),
+  projectCode: z.string().max(50).optional(),
+  customerCode: z.string().max(50).optional(),
+  keyword: z.string().max(200).optional(),
+});
+
+// 通用导出 schema (projects/customers/car-models/risks)
+export const exportSimpleSchema = z.object({
+  format: z.enum(['xlsx', 'csv']).optional(),
+});
+
+// ============ validateQuery 中间件 (P2-1) ============
+export function validateQuery(schema: ZodSchema) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      req.query = schema.parse(req.query) as any;
+      next();
+    } catch (err: unknown) {
+      if (err instanceof ZodError) {
+        const errors = err.issues.map((e: any) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return res.status(400).json({
+          error: '查询参数校验失败',
           details: errors,
         });
       }

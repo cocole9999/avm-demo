@@ -18,10 +18,12 @@ import type { WorkItem, WorkItemType, MetaOptions, Activity } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { WorkloadTrend } from '../components/WorkloadTrend';
 import { DependencyGraph } from '../components/DependencyGraph';
+import { useWorkItemChanged } from '../services/useWorkItemChanged';
 
 export function WorkItemDetailPage() {
   const { id, type } = useParams<{ id: string; type: WorkItemType }>();
   const navigate = useNavigate();
+  const { modal } = App.useApp();
   const [item, setItem] = useState<WorkItem | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [options, setOptions] = useState<MetaOptions | null>(null);
@@ -41,19 +43,6 @@ export function WorkItemDetailPage() {
     try {
       const data = await workItemApi.get(id);
       setItem(data);
-      form.setFieldsValue({
-        title: data.title,
-        description: data.description,
-        status: data.status,
-        priority: data.priority,
-        severity: data.severity,
-        assignee: data.assignee,
-        module: data.module,
-        estimate: data.estimate,
-        actualHours: data.actualHours,
-        planRange: data.planStart && data.planEnd ? [dayjs(data.planStart), dayjs(data.planEnd)] : null,
-        labels: data.labels,
-      });
       const acts = await activityApi.list(id);
       setActivities(acts);
     } catch (e: any) {
@@ -61,12 +50,34 @@ export function WorkItemDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, form]);
+  }, [id]);
+
+  // V1.47: form.setFieldsValue 移到 useEffect, 确保 Form 已渲染后再设值
+  useEffect(() => {
+    if (item) {
+      form.setFieldsValue({
+        title: item.title,
+        description: item.description,
+        status: item.status,
+        priority: item.priority,
+        severity: item.severity,
+        assignee: item.assignee,
+        module: item.module,
+        estimate: item.estimate,
+        actualHours: item.actualHours,
+        planRange: item.planStart && item.planEnd ? [dayjs(item.planStart), dayjs(item.planEnd)] : null,
+        labels: item.labels,
+      });
+    }
+  }, [item, form]);
 
   useEffect(() => {
     load();
     metaApi.options().then(setOptions);
   }, [load]);
+
+  // V1.47: AI 修改工作项后自动刷新详情页
+  useWorkItemChanged(() => { load(); }, { id: id });
 
   const handleSave = async () => {
     try {
@@ -83,7 +94,7 @@ export function WorkItemDetailPage() {
         actualHours: values.actualHours,
         planStart: values.planRange?.[0]?.toISOString(),
         planEnd: values.planRange?.[1]?.toISOString(),
-        labels: values.labels || '',
+        labels: Array.isArray(values.labels) ? values.labels : undefined,
         actor: '我',
       });
       message.success('保存成功');
@@ -189,7 +200,7 @@ export function WorkItemDetailPage() {
   };
 
   const handleDelete = async () => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `${item?.key} 将被永久删除`,
       okType: 'danger',
@@ -251,7 +262,7 @@ export function WorkItemDetailPage() {
         description: item.description,
         module: item.module,
       });
-      Modal.confirm({
+      modal.confirm({
         title: 'AI 估分建议',
         content: (
           <div>
@@ -272,23 +283,28 @@ export function WorkItemDetailPage() {
   };
 
   // V1.21: AI 拆子任务
+  const [decomposeProgress, setDecomposeProgress] = useState('');
+  const [decomposing, setDecomposing] = useState(false);
   const handleAIDecompose = async () => {
     try {
-      setLoading(true);
+      setDecomposing(true);
+      setDecomposeProgress('正在调用 AI 拆解子任务，请稍候...');
       const r = await aiApi.decompose(id!);
-      setLoading(false);
+      setDecomposing(false);
+      setDecomposeProgress('');
       setDecomposeData(r);
       setDecomposeSelected(r.subtasks.map((_: any, i: number) => i));  // 默认全选
     } catch (e: any) {
-      setLoading(false);
-      message.error('AI 拆解失败: ' + e.message);
+      setDecomposing(false);
+      setDecomposeProgress('');
+      message.error('AI 拆解失败: ' + (e.message || '未知错误'));
     }
   };
 
   const handleAIRisk = async () => {
     try {
       const r = await aiApi.assessRisk(id!);
-      Modal.info({
+      modal.info({
         title: 'AI 风险评估',
         width: 500,
         content: (
@@ -349,7 +365,13 @@ export function WorkItemDetailPage() {
   };
 
   if (loading || !item) {
-    return <Card loading={!item && !loading}><Empty /></Card>;
+    return (
+      <Card loading={!item && !loading}>
+        <Empty />
+        {/* V1.47: 渲染隐藏 Form, 避免 useForm 未连接警告 */}
+        <Form form={form} component={false} />
+      </Card>
+    );
   }
 
   const statusList = options?.statusByType[item.type]?.values || [];
@@ -414,7 +436,15 @@ export function WorkItemDetailPage() {
                   <Button icon={<RobotOutlined />} onClick={handleAIEstimate}>AI 估分</Button>
                 )}
                 <Button icon={<FireOutlined />} onClick={handleAIRisk}>AI 风险</Button>
-                <Button icon={<BranchesOutlined />} onClick={handleAIDecompose} title="AI 自动拆成 3-8 个可执行子任务">AI 拆解</Button>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <Button icon={<BranchesOutlined />} onClick={handleAIDecompose} loading={decomposing} title="AI 自动拆成 3-8 个可执行子任务">AI 拆解</Button>
+                  {decomposing && decomposeProgress && (
+                    <div style={{ marginTop: 4, padding: '4px 10px', background: '#e6f4ff', border: '1px solid #91caff', borderRadius: 6, color: '#1677ff', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      <Spin size="small" style={{ marginRight: 6 }} />
+                      {decomposeProgress}
+                    </div>
+                  )}
+                </div>
                 <Button icon={<EditOutlined />} onClick={() => setEditing(true)}>编辑</Button>
                 <Button icon={<CopyOutlined />} onClick={handleCopy} title="基于此工作项快速创建相似任务">复制</Button>
                 <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>删除</Button>
@@ -497,7 +527,7 @@ export function WorkItemDetailPage() {
             <Descriptions.Item label="客户（内部项目组）">
               {item.customer ? <Tag color="blue">{item.customer.name}</Tag> : <span style={{ color: '#ccc' }}>-</span>}
             </Descriptions.Item>
-            <Descriptions.Item label="车型">
+            <Descriptions.Item label="车型" span={2}>
               {item.carModel ? <Tag color="purple">{item.carModel.brand} {item.carModel.name}</Tag> : <span style={{ color: '#ccc' }}>-</span>}
             </Descriptions.Item>
             <Descriptions.Item label={<><BranchesOutlined /> 流程流转</>} span={3}>
@@ -525,7 +555,7 @@ export function WorkItemDetailPage() {
                 </Form.Item>
               ) : item.estimate != null ? `${item.estimate} SP` : <span style={{ color: '#ccc' }}>-</span>}
             </Descriptions.Item>
-            <Descriptions.Item label="实际工时">
+            <Descriptions.Item label="实际工时" span={2}>
               {editing ? (
                 <Form.Item name="actualHours" noStyle>
                   <Input type="number" placeholder="小时" />
@@ -874,6 +904,7 @@ export function WorkItemDetailPage() {
           setCreatingSubtasks(true);
           let created = 0;
           let failed = 0;
+          const errors: string[] = [];
           for (const st of picked) {
             try {
               await workItemApi.create({
@@ -881,18 +912,30 @@ export function WorkItemDetailPage() {
                 title: st.title,
                 description: st.reason || `AI 拆解自 ${decomposeData.parent.key}: ${decomposeData.parent.title}`,
                 priority: st.priority || 'P2',
-                parentId: id,
-                reporter: 'AI 拆解',
-                actor: '我',
+                parentId: item?.id || decomposeData.parent.id,
+                reporter: 'AI',
               });
               created++;
-            } catch {
+            } catch (e: any) {
               failed++;
+              // V1.47: 优先显示后端返回的具体错误 (e.response.data.error)
+              const detail = e.response?.data?.details
+                ? JSON.stringify(e.response.data.details)
+                : (e.response?.data?.error || e.message || '未知错误');
+              errors.push(`${st.title}: ${detail}`);
             }
           }
           setCreatingSubtasks(false);
           setDecomposeData(null);
           message.success(`已创建 ${created} 个子任务${failed ? `, 失败 ${failed}` : ''}`);
+          if (errors.length > 0) {
+            console.error('子任务创建失败:', errors);
+            modal.error({
+              title: `${failed} 个子任务创建失败`,
+              content: <div style={{ maxHeight: 300, overflow: 'auto' }}>{errors.map((e, i) => <div key={i} style={{ marginBottom: 4, color: '#ff4d4f' }}>{e}</div>)}</div>,
+              width: 500,
+            });
+          }
           load();
         }}
         okText={`创建 ${decomposeSelected.length} 个子任务`}
@@ -1292,6 +1335,7 @@ function DependencyTab({ workItemId }: { workItemId: string }) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         width={560}
+        forceRender
         extra={
           <Space>
             <Button onClick={() => setDrawerOpen(false)}>取消</Button>

@@ -182,7 +182,15 @@ aiRouter.post('/decompose', async (req, res) => {
         })).filter((s: any) => s.title);
       }
     } catch (parseErr) {
-      return res.status(500).json({ error: 'AI 返回非 JSON, 解析失败: ' + (parseErr as any).message, raw: r.content });
+      // JSON 解析失败时降级到模板
+      console.warn('[decompose] JSON 解析失败, 降级到模板:', (parseErr as any).message);
+      return res.json({
+        ok: true,
+        llmModel: r.model,
+        parent: { id: item.id, key: item.key, title: item.title },
+        subtasks: generateTemplateSubtasks(item),
+        note: 'AI 返回格式异常, 已降级为模板拆分',
+      });
     }
 
     res.json({
@@ -192,7 +200,21 @@ aiRouter.post('/decompose', async (req, res) => {
       subtasks,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error('[decompose] 错误:', e.message);
+    // LLM 调用失败时降级到模板
+    try {
+      const item = await prisma.workItem.findUnique({ where: { id: req.body.workItemId } });
+      if (item) {
+        return res.json({
+          ok: true,
+          llmModel: null,
+          parent: { id: item.id, key: item.key, title: item.title },
+          subtasks: generateTemplateSubtasks(item),
+          note: `AI 服务异常 (${e.message}), 已降级为模板拆分`,
+        });
+      }
+    } catch { /* ignore */ }
+    res.status(500).json({ error: 'AI 拆解失败: ' + e.message });
   }
 });
 

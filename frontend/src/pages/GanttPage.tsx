@@ -23,6 +23,8 @@ import { workItemApi, projectApi, iterationApi } from '../api';
 import type { GanttProject as GanttProjectType, GanttItem as GanttItemType, GanttRelation as GanttRelationType, GanttData } from '../types';
 import { useAuth } from '../AuthContext';
 import { BurndownChart } from '../components/BurndownChart';
+import { MarkdownContent } from '../components/MarkdownContent';
+import { useWorkItemChanged } from '../services/useWorkItemChanged';
 
 type Scale = 'day' | 'week' | 'month';
 const SCALE_PX: Record<Scale, number> = { day: 40, week: 22, month: 12 };
@@ -165,6 +167,8 @@ export function GanttPage() {
   };
 
   useEffect(() => { load(); }, [selectedProject, showUnscheduled]);
+  // V1.47: AI 修改/新增工作项后自动刷新甘特图
+  useWorkItemChanged(() => { load(); });
 
   // 计算时间刻度（必须在 useEffect 之前定义，否则 TDZ）
   const { dayList, totalDays, totalWidth, fromDate, toDate } = useMemo(() => {
@@ -304,7 +308,7 @@ export function GanttPage() {
   return (
     <div>
       {/* 顶部工具栏 */}
-      <Card style={{ marginBottom: 16 }} bodyStyle={{ padding: 16 }}>
+      <Card style={{ marginBottom: 16 }} styles={{ body: { padding: 16 } }}>
         <Space wrap size="middle" style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space wrap>
             <Select
@@ -402,7 +406,7 @@ export function GanttPage() {
             <Tag color="purple">{totalDays} 天</Tag>
           </Space>
         }
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
         loading={loading}
       >
         {!data || data.items.length === 0 ? (
@@ -719,7 +723,7 @@ export function GanttPage() {
 
       {/* 底部图例 */}
       {data && data.items.length > 0 && (
-        <Card style={{ marginTop: 16 }} bodyStyle={{ padding: 12 }}>
+        <Card style={{ marginTop: 16 }} styles={{ body: { padding: 12 } }}>
           <Space size="large" wrap>
             <span style={{ fontSize: 12, color: '#666' }}>类型：</span>
             {Object.entries(TYPE_LABEL).map(([k, label]) => (
@@ -750,7 +754,7 @@ export function GanttPage() {
         onOk={saveEdit}
         okText="保存"
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={editForm} layout="vertical">
           <Form.Item name="planStart" label="计划开始" rules={[{ required: true, message: '请选择开始日期' }]}>
@@ -801,33 +805,12 @@ export function GanttPage() {
                 <Col span={4}><Card size="small"><Statistic title="工时偏差" value={`${retroData.summary.totalEstimate}h / ${retroData.summary.totalActual}h`} valueStyle={{ fontSize: 14 }} /></Card></Col>
               </Row>
               {/* Markdown 内容 */}
-              <div style={{ maxHeight: 500, overflow: 'auto', padding: 12, lineHeight: 1.7, background: '#fafafa', borderRadius: 6 }}>
-                {renderRetroMarkdown(retroData.report || '')}
+              <div style={{ maxHeight: 500, overflow: 'auto', padding: 12, background: '#fafafa', borderRadius: 6 }}>
+                <MarkdownContent content={retroData.report || ''} />
               </div>
             </>
           ) : <Empty description="无数据" />}
       </Modal>
     </div>
   );
-}
-
-// V1.28 简单 markdown 渲染 (用于回顾报告)
-function renderRetroMarkdown(md: string) {
-  const lines = md.split('\n');
-  return lines.map((line, i) => {
-    if (line.startsWith('# ')) return <h1 key={i} style={{ fontSize: 20, marginTop: 12 }}>{line.slice(2)}</h1>;
-    if (line.startsWith('## ')) return <h2 key={i} style={{ fontSize: 16, marginTop: 14, borderBottom: '1px solid #e8e8e8', paddingBottom: 4 }}>{line.slice(3)}</h2>;
-    if (line.startsWith('### ')) return <h3 key={i} style={{ fontSize: 14, marginTop: 10, color: '#1677ff' }}>{line.slice(4)}</h3>;
-    if (line.startsWith('| ') && line.endsWith('|')) {
-      const cells = line.split('|').map(c => c.trim()).filter(c => c);
-      if (cells.every(c => /^[-:]+$/.test(c))) return null;
-      return <div key={i} style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', padding: '4px 0' }}>{cells.map((c, j) => <div key={j} style={{ flex: 1, padding: '0 8px' }}>{c}</div>)}</div>;
-    }
-    if (line.match(/^[-*]\s/)) return <div key={i} style={{ paddingLeft: 16 }}>• {line.replace(/^[-*]\s/, '')}</div>;
-    if (/^\d+\.\s/.test(line)) return <div key={i} style={{ paddingLeft: 16 }}>{line}</div>;
-    if (line.startsWith('> ')) return <div key={i} style={{ color: '#666', fontStyle: 'italic', paddingLeft: 8, borderLeft: '3px solid #d9d9d9', margin: '4px 0' }}>{line.slice(2)}</div>;
-    if (line.trim() === '---') return <hr key={i} style={{ margin: '12px 0', border: 0, borderTop: '1px dashed #d9d9d9' }} />;
-    if (!line.trim()) return <br key={i} />;
-    return <p key={i} style={{ margin: '4px 0' }}>{line}</p>;
-  });
 }

@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   RobotOutlined, SendOutlined, UserOutlined, BulbOutlined, FireOutlined, FileTextOutlined,
-  MedicineBoxOutlined, FlagOutlined, SettingOutlined, ExperimentOutlined,
+  MedicineBoxOutlined, FlagOutlined, SettingOutlined, ExperimentOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 import { aiApi, llmSettingsApi, metaApi } from '../api';
 import type { AIFieldConfig } from '../types';
@@ -39,6 +39,19 @@ export function AIPage() {
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [refreshingWiki, setRefreshingWiki] = useState(false);
+
+  const handleRefreshWiki = async () => {
+    setRefreshingWiki(true);
+    try {
+      const r = await aiApi.refreshWiki();
+      message.success(`Wiki 快照已刷新（${r.pageCount} 页 / ${r.chars} 字符）`);
+    } catch (e: any) {
+      message.error('刷新失败：' + e.message);
+    } finally {
+      setRefreshingWiki(false);
+    }
+  };
 
   useEffect(() => {
     const refresh = () => aiApi.llmStatus().then(setLlmStatus).catch(() => {});
@@ -120,6 +133,17 @@ export function AIPage() {
           <Link to="/llm-settings">
             <Button size="small" type="link" icon={<SettingOutlined />}>LLM 设置</Button>
           </Link>
+          <Tooltip title="手动刷新 AI 知识库快照">
+            <Button
+              size="small"
+              type="link"
+              icon={<ReloadOutlined />}
+              loading={refreshingWiki}
+              onClick={handleRefreshWiki}
+            >
+              刷新知识
+            </Button>
+          </Tooltip>
         </Space>
         {stats && (
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e8e8e8' }}>

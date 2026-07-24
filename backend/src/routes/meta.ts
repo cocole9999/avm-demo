@@ -5,12 +5,30 @@ import { STATUS_BY_TYPE, TYPE_OPTIONS, PRIORITY_OPTIONS, SEVERITY_OPTIONS, RELAT
 export const metaRouter = Router();
 
 metaRouter.get('/options', async (_req, res) => {
+  // 获取所有已分配过负责人的列表
+  const assigneeRows = await prisma.workItem.findMany({
+    where: { assignee: { not: null } },
+    distinct: ['assignee'],
+    select: { assignee: true },
+  });
+  const assignees = assigneeRows.map(r => r.assignee).filter(Boolean);
+
+  // 获取所有已使用过的模块列表
+  const moduleRows = await prisma.workItem.findMany({
+    where: { module: { not: null } },
+    distinct: ['module'],
+    select: { module: true },
+  });
+  const modules = moduleRows.map(r => r.module).filter(Boolean);
+
   res.json({
     types: TYPE_OPTIONS,
     priority: PRIORITY_OPTIONS,
     severity: SEVERITY_OPTIONS,
     relationTypes: RELATION_TYPES,
     statusByType: STATUS_BY_TYPE,
+    assignees,
+    modules,
   });
 });
 

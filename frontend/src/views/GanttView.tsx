@@ -42,8 +42,10 @@ export function GanttView({ items, onClickItem }: Props) {
     }).catch(() => setBaselineMap({}));
   }, [selectedBaselineId]);
 
-  // 过滤有排期的项
-  const scheduled = useMemo(() => items.filter(i => i.planStart && i.planEnd), [items]);
+  // 过滤有排期的项（按计划开始时间升序）
+  const scheduled = useMemo(() => items
+    .filter(i => i.planStart && i.planEnd)
+    .sort((a, b) => new Date(a.planStart!).getTime() - new Date(b.planStart!).getTime()), [items]);
   const unscheduled = useMemo(() => items.filter(i => !i.planStart || !i.planEnd), [items]);
 
   // 计算时间范围

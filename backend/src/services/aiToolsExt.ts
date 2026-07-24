@@ -3,7 +3,8 @@
  * 让 AI 能创建项目/客户/车型/联系人/迭代/流程/工作项评论/通知已读
  */
 import { prisma } from '../db';
-import type { ToolDefinition } from './aiTools';
+import type { ToolDefinition } from './aiToolsQuery';
+import { broadcastAll } from './wsServer';
 
 const N = (s: string) => s; // 保留 const 名称一致性
 
@@ -582,7 +583,11 @@ export const deleteWorkItem: ToolDefinition = {
   handler: async (args) => {
     if (!args.id && !args.key) throw new Error('id 或 key 必填');
     const where = args.id ? { id: args.id } : { key: args.key };
+    const item = await prisma.workItem.findUnique({ where, select: { id: true, key: true } });
     await prisma.workItem.delete({ where });
+    if (item) {
+      try { broadcastAll({ type: 'work_item_changed', action: 'deleted', key: item.key, id: item.id, changes: [] }); } catch {}
+    }
     return { ok: true, message: `已删除工作项 ${args.key || args.id}` };
   },
 };
@@ -615,6 +620,7 @@ export const assignIteration: ToolDefinition = {
       iterationId = it.id;
     }
     const w = await prisma.workItem.update({ where: { id: workItemId }, data: { iterationId } });
+    try { broadcastAll({ type: 'work_item_changed', action: 'updated', key: w.key, id: w.id, changes: ['iterationId'] }); } catch {}
     return { ok: true, key: w.key, message: `已把 ${w.key} 分配到迭代` };
   },
 };

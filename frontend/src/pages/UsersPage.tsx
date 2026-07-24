@@ -271,7 +271,7 @@ export function UsersPage() {
         onOk={saveRole}
         okText="保存"
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={editForm} layout="vertical">
           <Form.Item name="role" label="角色" rules={[{ required: true }]}>
@@ -300,7 +300,7 @@ export function UsersPage() {
         onOk={submitCreate}
         okText="创建"
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={createForm} layout="vertical">
           <Form.Item name="username" label="用户名" rules={[{ required: true, min: 3, max: 20, pattern: /^[a-zA-Z0-9_]+$/, message: '3-20 位字母/数字/下划线' }]}>
@@ -334,7 +334,7 @@ export function UsersPage() {
         onOk={submitResetPwd}
         okText="重置"
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={pwdForm} layout="vertical">
           <Form.Item name="password" label="新密码" rules={[{ required: true, min: 6, message: '至少 6 位' }]}>

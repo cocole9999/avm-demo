@@ -48,6 +48,10 @@ export interface WikiKnowledge {
   chars: number;
 }
 
+export function clearWikiKnowledgeCache(): void {
+  _cache = null;
+}
+
 export function loadWikiKnowledge(): WikiKnowledge {
   if (_cache && Date.now() - _cache.ts < TTL) {
     return { text: _cache.text, pageCount: 0, chars: _cache.text.length };

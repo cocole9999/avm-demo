@@ -139,14 +139,19 @@ export function pushToUser(userId: string, payload: any): number {
  * 推送给所有连接 (广播, e.g. 系统通知)
  */
 export function broadcastAll(payload: any): number {
-  if (!wss) return 0;
+  if (!wss) {
+    console.log('[wsServer] broadcastAll: wss 未就绪, 丢弃:', payload?.type);
+    return 0;
+  }
   const data = JSON.stringify({ ...payload, ts: Date.now() });
   let n = 0;
+  const totalClients = wss.clients.size;
   wss.clients.forEach(ws => {
     if (ws.readyState === WebSocket.OPEN) {
       try { ws.send(data); n++; } catch {}
     }
   });
+  console.log(`[wsServer] broadcastAll: type=${payload?.type} action=${payload?.action} key=${payload?.key} sent=${n}/${totalClients}`);
   return n;
 }
 

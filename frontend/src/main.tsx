@@ -4,6 +4,7 @@ import { ConfigProvider, App as AntdApp, message as antdMessage } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import 'dayjs/locale/zh-cn';
 import 'antd/dist/reset.css';
+import './index.css';
 import Root from './Root';
 import { AuthProvider } from './AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';

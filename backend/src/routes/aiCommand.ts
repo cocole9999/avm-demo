@@ -7,7 +7,7 @@
 import { Router } from 'express';
 import { getLLMProvider, clearLLMCache } from '../services/llmProvider';
 import { buildProjectSnapshot } from '../services/projectSnapshot';
-import { loadWikiKnowledge } from '../services/wikiKnowledge';
+import { loadWikiKnowledge, clearWikiKnowledgeCache } from '../services/wikiKnowledge';
 import { toolsToOpenAIFormat, executeTool } from '../services/aiTools';
 import { prisma } from '../db';
 import { runRiskScan, startRiskScanner } from '../services/riskScanner';
@@ -27,6 +27,13 @@ aiCommandRouter.get('/tools', (_req, res) => {
   res.json({ tools: toolsToOpenAIFormat() });
 });
 
+// V1.31 P1-4: 手动刷新 Wiki 知识快照缓存
+aiCommandRouter.post('/refresh-wiki', (_req, res) => {
+  clearWikiKnowledgeCache();
+  const refreshed = loadWikiKnowledge();
+  res.json({ ok: true, pageCount: refreshed.pageCount, chars: refreshed.chars });
+});
+
 interface CommandRequest {
   command: string;        // 用户命令（如 "创建一个 P0 需求：AVM 透明底盘"）
   context?: any;          // 可选上下文（如当前页面信息）
@@ -37,9 +44,17 @@ interface CommandRequest {
     tool_calls?: any[];
     tool_call_id?: string;
   }>;
+  attachments?: Array<{   // V1.41 多模态附件
+    name: string;
+    type: 'file' | 'image';
+    content?: string;      // 文本文件内容（文本类型）
+    dataUrl?: string;      // 图片 base64 dataURL
+    size?: number;
+  }>;
 }
 
 interface ToolCallRecord {
+  id?: string;
   name: string;
   args: any;
   result: any;
@@ -48,12 +63,44 @@ interface ToolCallRecord {
 
 aiCommandRouter.post('/command', async (req, res) => {
   try {
-    const { command, context, maxSteps = 5, history } = req.body as CommandRequest;
-    if (!command) return res.status(400).json({ error: 'command 必填' });
+    const { command, context, maxSteps = 5, history, attachments } = req.body as CommandRequest;
+    if (!command && (!attachments || attachments.length === 0)) {
+      return res.status(400).json({ error: 'command 或 attachments 必填' });
+    }
 
     const provider = await getLLMProvider();
     if (!provider.isAvailable() || provider.name === 'mock') {
       return res.status(400).json({ error: 'LLM 未配置，请先在 LLM 设置里配置 API Key' });
+    }
+
+    // 构造附件文本前缀
+    let attachmentText = '';
+    const imageParts: any[] = [];
+    if (attachments && attachments.length > 0) {
+      const textAtts = attachments.filter(a => a.type === 'file' && a.content);
+      const imgAtts = attachments.filter(a => a.type === 'image' && a.dataUrl);
+      if (textAtts.length > 0) {
+        attachmentText = textAtts.map(a => {
+          const truncated = a.content && a.content.length > 30000 ? a.content.slice(0, 30000) + '\n...(文件已截断，原文件 ' + (a.size || a.content.length) + ' 字节)' : a.content;
+          return `\n\n---\n### 用户上传的文件：${a.name}\n\n${truncated}\n---\n`;
+        }).join('');
+      }
+      // 图片：仅当 provider 是视觉模型时传 dataUrl，否则在文本中提示
+      if (imgAtts.length > 0) {
+        const modelName = (provider as any).defaultModel || '';
+        const supportsVision = /vision|vl|gpt-4o|claude-3|gemini|qwen-vl|glm-4v|doubao-vision|minimax-vl|seed/i.test(modelName)
+          || ['openai', 'anthropic', 'qwen', 'glm', 'doubao', 'minimax'].includes(provider.name);
+        if (supportsVision) {
+          for (const img of imgAtts) {
+            if (img.dataUrl) {
+              imageParts.push({ type: 'image_url', image_url: { url: img.dataUrl } });
+            }
+          }
+          if (!attachmentText) attachmentText = imgAtts.map(a => `[用户上传图片: ${a.name}]`).join('\n') + '\n\n';
+        } else {
+          attachmentText += imgAtts.map(a => `[用户上传了图片: ${a.name}，但当前模型不支持图片识别，请切换到视觉模型（如 GPT-4o/Claude/Qwen-VL/豆包）]`).join('\n') + '\n';
+        }
+      }
     }
 
     // 拉项目快照（5 分钟缓存）让 LLM 知道有哪些项目/客户
@@ -75,36 +122,96 @@ aiCommandRouter.post('/command', async (req, res) => {
     }
     // V1.8.3: 注入多轮对话历史（限制总 token 防止爆）
     if (Array.isArray(history) && history.length > 0) {
-      // 只取最近 20 条，role 限定为 user/assistant/tool
-      const trimmed = history.slice(-20).filter(m => ['user', 'assistant', 'tool'].includes(m.role));
+      // 只取最近 12 条，role 限定为 user/assistant/tool
+      const trimmed = history.slice(-12).filter(m => ['user', 'assistant', 'tool'].includes(m.role));
+
+      // V1.47: 双向校验 — 先扫描确定哪些 tool_call_id 同时有 assistant(tool_calls) 和 tool 响应都在 trimmed 中
+      // 1. 收集 trimmed 中所有 assistant 的 tool_call id
+      const assistantToolCallIds = new Set<string>();
+      for (const m of trimmed) {
+        if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+          for (const tc of m.tool_calls) {
+            if (tc && tc.id) assistantToolCallIds.add(tc.id);
+          }
+        }
+      }
+      // 2. 收集 trimmed 中所有 tool 消息的 tool_call_id
+      const toolResponseIds = new Set<string>();
+      for (const m of trimmed) {
+        if (m.role === 'tool' && m.tool_call_id) toolResponseIds.add(m.tool_call_id);
+      }
+      // 3. 只有双向都存在的 id 才是完整的，可以保留
+      const validToolCallIds = new Set<string>();
+      for (const id of assistantToolCallIds) {
+        if (toolResponseIds.has(id)) validToolCallIds.add(id);
+      }
+      // 4. 对于 tool 消息，还要校验它前面是否有对应的 assistant 消息（在 messages 中已 push 的）
+      //    避免 tool 消息出现在 assistant 之前导致 "must be a response to preceding tool_calls" 错误
+      const pushedAssistantToolCallIds = new Set<string>();
+
       for (const m of trimmed) {
         if (m.role === 'user' && typeof m.content === 'string') {
-          messages.push({ role: 'user', content: m.content });
+          // 截断过长的用户消息
+          const content = m.content.length > 8000 ? m.content.slice(0, 8000) + '\n...(已截断)' : m.content;
+          messages.push({ role: 'user', content });
         } else if (m.role === 'assistant') {
+          // V1.47: 只保留双向匹配的 tool_calls
+          let assistantToolCalls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+          if (assistantToolCalls.length > 0) {
+            assistantToolCalls = assistantToolCalls.filter((tc: any) => tc && tc.id && validToolCallIds.has(tc.id));
+          }
+          // 记录已 push 的 assistant tool_call id，供后续 tool 消息校验
+          for (const tc of assistantToolCalls) {
+            if (tc && tc.id) pushedAssistantToolCallIds.add(tc.id);
+          }
           messages.push({
             role: 'assistant',
             content: m.content || null,
-            ...(Array.isArray(m.tool_calls) && m.tool_calls.length > 0 ? { tool_calls: m.tool_calls } : {}),
+            ...(assistantToolCalls.length > 0 ? { tool_calls: assistantToolCalls } : {}),
           });
         } else if (m.role === 'tool' && m.tool_call_id) {
-          messages.push({ role: 'tool', tool_call_id: m.tool_call_id, content: m.content || '' });
+          // V1.47: 只有当对应的 assistant(tool_calls) 已经 push 到 messages 中，才保留 tool 消息
+          if (!pushedAssistantToolCallIds.has(m.tool_call_id)) {
+            // 对应的 assistant 被截断或顺序错乱，跳过此 tool 消息
+            continue;
+          }
+          // 消费后移除，避免重复
+          pushedAssistantToolCallIds.delete(m.tool_call_id);
+          // 截断过长的工具返回内容
+          const content = (m.content || '').length > 2000 ? (m.content || '').slice(0, 2000) + '\n...(已截断)' : (m.content || '');
+          messages.push({ role: 'tool', tool_call_id: m.tool_call_id, content });
         }
       }
     }
-    messages.push({ role: 'user', content: command });
+    // 构造最终 user 消息（支持多模态：文本 + 图片）
+    let finalCommand = (command || '').trim();
+    
+    // 如果有附件，在消息开头添加说明
+    if (attachmentText) {
+      finalCommand = `用户已上传文件/图片，请根据以下内容回答用户的问题：\n\n${attachmentText}\n\n---\n\n用户问题：${finalCommand}`;
+    }
+    
+    if (imageParts.length > 0) {
+      // 多模态格式：OpenAI 兼容的 content 数组
+      const contentParts: any[] = [{ type: 'text', text: finalCommand || '请分析用户上传的图片' }];
+      contentParts.push(...imageParts);
+      messages.push({ role: 'user', content: contentParts });
+    } else {
+      messages.push({ role: 'user', content: finalCommand });
+    }
 
     // 循环：让 LLM 多次调工具直到得到最终回答
     const toolCalls: ToolCallRecord[] = [];
     let finalContent = '';
     let totalPromptTokens = 0;
     let totalCompletionTokens = 0;
-    const steps = Math.min(maxSteps, 8);
+    const steps = Math.min(maxSteps, 20); // 上限提高到 20，支持大量工具调用
 
     for (let i = 0; i < steps; i++) {
       const r: any = await provider.chat(messages as any, {
         model: (provider as any).defaultModel,
         temperature: 0.2,
-        maxTokens: 1500,
+        maxTokens: 4096,
         tools,
         tool_choice: 'auto',  // 一直允许 LLM 调工具
       } as any);
@@ -116,7 +223,7 @@ aiCommandRouter.post('/command', async (req, res) => {
       const content = r.content || '';
       const toolCallsInMsg = (r as any).toolCalls || [];
 
-      // 如果没有 tool_calls，结束
+      // 如果没有 tool_calls，说明 LLM 给出了最终回答
       if (!toolCallsInMsg || toolCallsInMsg.length === 0) {
         finalContent = content;
         break;
@@ -132,26 +239,53 @@ aiCommandRouter.post('/command', async (req, res) => {
       // 执行每个 tool_call
       for (const tc of toolCallsInMsg) {
         const name = tc.function.name;
+        const id = tc.id;
         let args: any = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); }
         catch { args = {}; }
+        console.log(`[ai-command] 工具调用: ${name}`, JSON.stringify(args).slice(0, 300));
         try {
           const result = await executeTool(name, args);
-          toolCalls.push({ name, args, result });
+          toolCalls.push({ id, name, args, result });
           messages.push({
             role: 'tool',
-            tool_call_id: tc.id,
+            tool_call_id: id,
             content: typeof result === 'string' ? result : JSON.stringify(result, null, 2).slice(0, 4000),
           });
         } catch (e: any) {
-          toolCalls.push({ name, args, result: null, error: e.message });
+          toolCalls.push({ id, name, args, result: null, error: e.message });
           messages.push({
             role: 'tool',
-            tool_call_id: tc.id,
+            tool_call_id: id,
             content: `错误: ${e.message}`,
           });
         }
       }
+
+      // 最后一轮如果还有 tool_calls，记录内容作为候选
+      if (content && i === steps - 1) {
+        finalContent = content;
+      }
+    }
+
+    // 兜底：如果循环结束仍无最终回答，强制让 LLM 生成总结（不带工具）
+    if (!finalContent && toolCalls.length > 0) {
+      try {
+        messages.push({
+          role: 'user',
+          content: '请根据以上工具调用的结果，给用户一个完整的总结回答。',
+        });
+        const r: any = await provider.chat(messages as any, {
+          model: (provider as any).defaultModel,
+          temperature: 0.2,
+          maxTokens: 4096,
+        } as any);
+        if (r.usage) {
+          totalPromptTokens += r.usage.promptTokens || 0;
+          totalCompletionTokens += r.usage.completionTokens || 0;
+        }
+        finalContent = r.content || '';
+      } catch { /* 忽略兜底失败 */ }
     }
 
     res.json({
@@ -164,7 +298,20 @@ aiCommandRouter.post('/command', async (req, res) => {
       provider: provider.name,
     });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    console.error('[ai-command] 错误:', e.message, e.stack);
+    // 如果是 LLM API 错误，返回更友好的提示
+    const errorMsg = e.message || '未知错误';
+    let friendlyMsg = errorMsg;
+    if (errorMsg.includes('context length') || errorMsg.includes('token limit') || errorMsg.includes('maximum context')) {
+      friendlyMsg = '对话历史过长，超出了模型上下文限制。请开启新对话或清空历史记录后重试。';
+    } else if (errorMsg.includes('rate limit') || errorMsg.includes('429')) {
+      friendlyMsg = '请求过于频繁，请稍后再试。';
+    } else if (errorMsg.includes('API key') || errorMsg.includes('authentication') || errorMsg.includes('401')) {
+      friendlyMsg = 'LLM API Key 无效或已过期，请在 LLM 设置中重新配置。';
+    } else if (errorMsg.includes('network') || errorMsg.includes('ECONNREFUSED') || errorMsg.includes('timeout')) {
+      friendlyMsg = '无法连接到 LLM 服务，请检查网络连接或 API 配置。';
+    }
+    res.status(500).json({ error: friendlyMsg, rawError: errorMsg });
   }
 });
 

@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Select, Spin, Empty, Card, Space, Tag } from 'antd';
 import { iterationApi, api } from '../api';
+import { useWorkItemChanged } from '../services/useWorkItemChanged';
 
 interface BurndownData {
   iteration: { id: string; name: string; startDate: string; endDate: string; totalEstimate: number };
@@ -37,6 +38,15 @@ export function BurndownChart() {
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, [selected]);
+
+  // V1.47: AI 修改/新增工作项后自动刷新燃尽图
+  useWorkItemChanged(() => {
+    if (!selected) return;
+    api.get(`/iterations/${selected}/burndown`)
+      .then(r => r.data)
+      .then(d => setData(d))
+      .catch(() => {});
+  });
 
   const option = data ? {
     grid: { left: 50, right: 16, top: 30, bottom: 40 },

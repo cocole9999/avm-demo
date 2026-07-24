@@ -73,8 +73,8 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   if (token) {
-    // V1.11: token 是 index 不是 unique, findUnique 只能用 id/username
-    const user = await prisma.user.findFirst({ where: { token } });
+    // P1-5: token 已改为 @unique，用 findUnique 替代 findFirst，确保多设备登录确定性
+    const user = await prisma.user.findUnique({ where: { token } });
     if (user && user.active) {
       // V1.30: 检查 token 过期 (tokenExpiresAt 为 null 表示永不过期, 向后兼容旧 token)
       if (user.tokenExpiresAt && user.tokenExpiresAt.getTime() < Date.now()) {

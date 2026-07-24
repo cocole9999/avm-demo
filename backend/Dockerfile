@@ -7,6 +7,8 @@ WORKDIR /app
 # 先 copy 锁文件, 利用 Docker 缓存
 COPY package*.json ./
 COPY prisma ./prisma/
+# 生产构建始终使用 PostgreSQL schema
+RUN cp prisma/schema.production.prisma prisma/schema.prisma
 RUN npm install --omit=dev --no-audit --no-fund
 
 # ============ 2. 编译 TS ============
@@ -15,8 +17,11 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY prisma ./prisma/
+# 生产构建始终使用 PostgreSQL schema
+RUN cp prisma/schema.production.prisma prisma/schema.prisma
 RUN npm install --no-audit --no-fund
 COPY src ./src
+RUN npx prisma generate
 RUN npx tsc
 
 # ============ 3. 运行时 ============

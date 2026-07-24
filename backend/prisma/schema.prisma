@@ -333,7 +333,7 @@ model User {
   department      String?
   role            String    @default("member")
   active          Boolean   @default(true)
-  token           String?   // V1.11 登录 token (32 字节 hex)
+  token           String?   @unique  // V1.11 登录 token (32 字节 hex, P1-5: unique 防多设备冲突)
   tokenExpiresAt  DateTime? // V1.30 token 过期时间 (TTL 来自 env.TOKEN_TTL_HOURS)
   tenantId        String?
   feishuOpenId    String?

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import type {
   WorkItem, Iteration, Comment, Activity, MetaOptions, WorkItemType,
   NodeFlow, Review, ReviewTemplate, ChartConfig,
@@ -27,35 +27,45 @@ export type {
 
 export const api = axios.create({
   baseURL: '/api',
+  timeout: 15000,
+});
+
+// V1.30.3 P1-2: LLM 工具链使用独立长超时实例（60s），避免普通接口被拖累
+export const llmApi = axios.create({
+  baseURL: '/api',
   timeout: 60000,
 });
 
 // V1.30.3 P0-8: axios 拦截器 — 自动注入 token + 401 跳登录
-api.interceptors.request.use((config) => {
-  try {
-    const raw = localStorage.getItem('avm-auth');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.token) {
-        config.headers.Authorization = `Bearer ${parsed.token}`;
+function attachAuthInterceptor(instance: AxiosInstance) {
+  instance.interceptors.request.use((config) => {
+    try {
+      const raw = localStorage.getItem('avm-auth');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.token) {
+          config.headers.Authorization = `Bearer ${parsed.token}`;
+        }
       }
-    }
-  } catch { /* ignore */ }
-  return config;
-});
+    } catch { /* ignore */ }
+    return config;
+  });
 
-api.interceptors.response.use(
-  (res) => res,
-  (error) => {
-    if (error?.response?.status === 401) {
-      localStorage.removeItem('avm-auth');
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login?expired=1';
+  instance.interceptors.response.use(
+    (res) => res,
+    (error) => {
+      if (error?.response?.status === 401) {
+        localStorage.removeItem('avm-auth');
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login?expired=1';
+        }
       }
-    }
-    return Promise.reject(error);
-  },
-);
+      return Promise.reject(error);
+    },
+  );
+}
+attachAuthInterceptor(api);
+attachAuthInterceptor(llmApi);
 
 type AnyData = Record<string, unknown>;
 type AnyParams = Record<string, unknown>;
@@ -145,36 +155,40 @@ export const dashboardApi = {
 };
 
 export const aiApi = {
-  suggestEstimate: (data: AnyData) => api.post('/ai/suggest-estimate', data).then(r => r.data),
-  classifyBug: (data: AnyData) => api.post('/ai/classify-bug', data).then(r => r.data),
-  aiCommand: (command: string, context?: AnyData) => api.post('/ai-command/command', { command, context }).then(r => r.data),
-  aiTools: () => api.get('/ai-command/tools').then(r => r.data),
-  aiSuggestions: (page: string) => api.post('/ai-command/suggestions', { page }).then(r => r.data),
-  aiFillWorkItem: (data: AnyData) => api.post('/ai-command/fill-work-item', data).then(r => r.data),
-  aiSuggestAssignee: (data: AnyData) => api.post('/ai-command/suggest-assignee', data).then(r => r.data),
-  aiRiskScan: () => api.post('/ai-command/risk-scan', {}).then(r => r.data),
-  aiFillForm: (formType: string, data: AnyData) => api.post('/ai-command/fill-form', { formType, ...data }).then(r => r.data),
-  createFollowUp: (notificationId: string, data?: AnyData) => api.post(`/ai-command/notifications/${notificationId}/create-follow-up`, data || {}).then(r => r.data),
-  weeklyReport: (params?: AnyParams) => api.get('/ai-command/weekly-report', { params }).then(r => r.data),
-  monthlyReport: (params?: AnyParams) => api.get('/ai-command/monthly-report', { params }).then(r => r.data),
-  latestReport: (params?: AnyParams) => api.get('/ai-command/reports/latest', { params }).then(r => r.data),
-  listReports: (params?: AnyParams) => api.get('/ai-command/reports/list', { params }).then(r => r.data),
-  report: (endpoint: string, params?: AnyParams) => api.get(`/ai-command${endpoint}`, { params }).then(r => r.data),
+  // LLM 调用类接口统一走 llmApi（60s 超时）
+  suggestEstimate: (data: AnyData) => llmApi.post('/ai/suggest-estimate', data).then(r => r.data),
+  classifyBug: (data: AnyData) => llmApi.post('/ai/classify-bug', data).then(r => r.data),
+  aiCommand: (command: string, context?: AnyData) => llmApi.post('/ai-command/command', { command, context }).then(r => r.data),
+  aiTools: () => llmApi.get('/ai-command/tools').then(r => r.data),
+  aiSuggestions: (page: string) => llmApi.post('/ai-command/suggestions', { page }).then(r => r.data),
+  aiFillWorkItem: (data: AnyData) => llmApi.post('/ai-command/fill-work-item', data).then(r => r.data),
+  aiSuggestAssignee: (data: AnyData) => llmApi.post('/ai-command/suggest-assignee', data).then(r => r.data),
+  aiRiskScan: () => llmApi.post('/ai-command/risk-scan', {}).then(r => r.data),
+  aiFillForm: (formType: string, data: AnyData) => llmApi.post('/ai-command/fill-form', { formType, ...data }).then(r => r.data),
+  createFollowUp: (notificationId: string, data?: AnyData) => llmApi.post(`/ai-command/notifications/${notificationId}/create-follow-up`, data || {}).then(r => r.data),
+  weeklyReport: (params?: AnyParams) => llmApi.get('/ai-command/weekly-report', { params }).then(r => r.data),
+  monthlyReport: (params?: AnyParams) => llmApi.get('/ai-command/monthly-report', { params }).then(r => r.data),
+  latestReport: (params?: AnyParams) => llmApi.get('/ai-command/reports/latest', { params }).then(r => r.data),
+  listReports: (params?: AnyParams) => llmApi.get('/ai-command/reports/list', { params }).then(r => r.data),
+  report: (endpoint: string, params?: AnyParams) => llmApi.get(`/ai-command${endpoint}`, { params }).then(r => r.data),
+  // 导出/配置/状态类接口保持 api（15s 超时）
   exportWorkItems: (params?: AnyParams) => api.get('/export/work-items', { params, responseType: 'blob' }).then(r => r.data),
   exportProjects: (params?: AnyParams) => api.get('/export/projects', { params, responseType: 'blob' }).then(r => r.data),
   exportCustomers: (params?: AnyParams) => api.get('/export/customers', { params, responseType: 'blob' }).then(r => r.data),
   exportCarModels: (params?: AnyParams) => api.get('/export/car-models', { params, responseType: 'blob' }).then(r => r.data),
   exportRisks: (params?: AnyParams) => api.get('/export/risks', { params, responseType: 'blob' }).then(r => r.data),
-  suggestPriority: (data: AnyData) => api.post('/ai/suggest-priority', data).then(r => r.data),
-  assessRisk: (workItemId: string) => api.post(`/ai/assess-risk/${workItemId}`, {}).then(r => r.data),
-  decompose: (workItemId: string) => api.post<{ ok: boolean; llmModel: string | null; parent: WorkItem; subtasks: WorkItem[]; note?: string }>('/ai/decompose', { workItemId }).then(r => r.data),
-  qa: (question: string) => api.post('/ai/qa', { question }).then(r => r.data),
+  suggestPriority: (data: AnyData) => llmApi.post('/ai/suggest-priority', data).then(r => r.data),
+  assessRisk: (workItemId: string) => llmApi.post(`/ai/assess-risk/${workItemId}`, {}).then(r => r.data),
+  decompose: (workItemId: string) => llmApi.post<{ ok: boolean; llmModel: string | null; parent: WorkItem; subtasks: WorkItem[]; note?: string }>('/ai/decompose', { workItemId }).then(r => r.data),
+  qa: (question: string) => llmApi.post('/ai/qa', { question }).then(r => r.data),
   listConfigs: () => api.get<AIFieldConfig[]>('/ai/configs').then(r => r.data),
   createConfig: (data: AnyData) => api.post<AIFieldConfig>('/ai/configs', data).then(r => r.data),
   updateConfig: (id: string, data: AnyData) => api.patch<AIFieldConfig>(`/ai/configs/${id}`, data).then(r => r.data),
   deleteConfig: (id: string) => api.delete(`/ai/configs/${id}`).then(r => r.data),
   logs: (limit = 50) => api.get('/ai/logs', { params: { limit } }).then(r => r.data),
   llmStatus: () => api.get('/ai/llm-status').then(r => r.data),
+  // V1.31 P1-4: 手动刷新 Wiki 知识快照缓存
+  refreshWiki: () => llmApi.post('/ai-command/refresh-wiki', {}).then(r => r.data),
 };
 
 export const userApi = {

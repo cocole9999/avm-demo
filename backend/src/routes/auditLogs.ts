@@ -15,6 +15,9 @@ export const auditLogRouter = Router();
 // 所有审计日志端点都要鉴权
 auditLogRouter.use(requireAuth);
 
+// P1-2: 审计日志含敏感信息（IP/操作记录），仅 space_admin 及以上可读
+auditLogRouter.use(requireRole('space_admin'));
+
 // 列表
 auditLogRouter.get('/', async (req, res) => {
   try {

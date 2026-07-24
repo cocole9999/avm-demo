@@ -48,7 +48,7 @@ workItemRouter.get('/', async (req, res) => {
 
   const items = await prisma.workItem.findMany({
     where,
-    orderBy: [{ updatedAt: 'desc' }],
+    orderBy: [{ key: 'asc' }],
     include: {
       iteration: { select: { id: true, name: true, status: true } },
       project: { select: { id: true, code: true, name: true } },
@@ -110,13 +110,16 @@ workItemRouter.get('/gantt', async (req, res) => {
       select: { id: true, code: true, name: true, startDate: true, endDate: true, status: true, progress: true },
       orderBy: { code: 'asc' },
     });
-    if (projects.length === 0) {
+    if (projects.length === 0 && projectCode) {
       return res.json({ projects: [], items: [], dateRange: { from, to } });
     }
 
     // 工作项 where 条件
     const projectIds = projects.map(p => p.id);
-    const itemWhere: any = { projectId: { in: projectIds } };
+    // V1.47: 如果指定了 projectCode 就按项目过滤；否则返回所有工作项（含无项目的）
+    const itemWhere: any = projectCode
+      ? { projectId: { in: projectIds } }
+      : {};
     // 时间窗过滤
     if (from || to) {
       const fromDate = from ? new Date(from) : new Date('2000-01-01');
@@ -273,9 +276,12 @@ workItemRouter.get('/:id', async (req, res) => {
 // POST /api/work-items - 创建
 workItemRouter.post('/', async (req, res) => {
   try {
+    // V1.47: 打印请求体便于调试子任务创建失败
+    console.log('[workItems POST] body:', JSON.stringify(req.body).slice(0, 800));
     // P2-2: 输入验证
     const parsed = workItemCreateSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.error('[workItems POST] 验证失败:', parsed.error.issues, 'body:', JSON.stringify(req.body).slice(0, 500));
       return res.status(400).json({ error: '输入验证失败', details: parsed.error.issues });
     }
     const {
@@ -287,10 +293,31 @@ workItemRouter.post('/', async (req, res) => {
     } = parsed.data;
 
   if (!TYPE_OPTIONS.includes(type)) {
+    console.error('[workItems POST] Invalid type:', type, 'body:', JSON.stringify(req.body).slice(0, 300));
     return res.status(400).json({ error: `Invalid type: ${type}` });
   }
   if (!title?.trim()) {
+    console.error('[workItems POST] Title is required, body:', JSON.stringify(req.body).slice(0, 300));
     return res.status(400).json({ error: 'Title is required' });
+  }
+
+  // V1.47: parentId 解析 — 优先按 id 查找（支持 UUID 和 cuid），找不到再按 key 查找
+  let resolvedParentId: string | null = parentId || null;
+  if (resolvedParentId) {
+    // 先尝试直接按 id 查找（覆盖 UUID 和 cuid 两种格式）
+    const byId = await prisma.workItem.findFirst({ where: { id: resolvedParentId, deletedAt: null } });
+    if (byId) {
+      resolvedParentId = byId.id;
+    } else {
+      // 再尝试按 key 查找（如 REQ-1）
+      const byKey = await prisma.workItem.findFirst({ where: { key: resolvedParentId, deletedAt: null } });
+      if (byKey) {
+        resolvedParentId = byKey.id;
+      } else {
+        console.error('[workItems POST] 父工作项不存在:', resolvedParentId);
+        return res.status(400).json({ error: `父工作项不存在: ${resolvedParentId}` });
+      }
+    }
   }
 
   const statusConfig = STATUS_BY_TYPE[type as keyof typeof STATUS_BY_TYPE];
@@ -313,7 +340,7 @@ workItemRouter.post('/', async (req, res) => {
       estimate: estimate != null ? Number(estimate) : null,
       planStart: planStart ? new Date(planStart) : null,
       planEnd: planEnd ? new Date(planEnd) : null,
-      parentId: parentId || null,
+      parentId: resolvedParentId,
       // V1.7
       projectId: projectId || null,
       carModelId: carModelId || null,

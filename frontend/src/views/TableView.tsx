@@ -333,7 +333,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
         okText="应用"
         cancelText="取消"
         confirmLoading={submitting}
-        destroyOnClose
+        destroyOnHidden
       >
         <Alert
           message={`将把 ${selectedRowKeys.length} 个工作项的 [${batchField}] 字段更新为所选值`}

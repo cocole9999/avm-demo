@@ -10,6 +10,12 @@ import crypto from 'crypto';
 import { prisma } from '../db';
 import { env } from '../env';
 import { encrypt, decrypt } from '../utils/crypto';
+import { requireRole } from '../middleware/auth';
+import { recordAudit, actorFromReq } from '../utils/audit';
+import { hashPassword } from '../utils/password';
+import { validateBody, tenantCreateSchema, tenantUpdateSchema, ssoSettingsSchema, ssoDemoLoginSchema, ssoBindSchema } from '../utils/validation';
+
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 export const ssoRouter = Router();
 
@@ -21,7 +27,7 @@ ssoRouter.get('/tenants', async (_req, res) => {
   res.json(list.map((t: any) => { const { ssoSettings, ssoLogs, ...rest } = t; return rest; }));
 });
 
-ssoRouter.post('/tenants', async (req, res) => {
+ssoRouter.post('/tenants', requireRole('tenant_admin'), validateBody(tenantCreateSchema), async (req, res) => {
   try {
     const { code, name, shortName, logo, industry, scale, contact, phone, plan, maxUsers } = req.body;
     const t = await prisma.tenant.create({
@@ -32,6 +38,7 @@ ssoRouter.post('/tenants', async (req, res) => {
         plan: plan || 'standard', maxUsers: maxUsers || 100,
       },
     });
+    recordAudit('role', t.id, 'create', null, { summary: `创建租户 ${t.code}: ${t.name}` }, actorFromReq(req));
     res.status(201).json(t);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
@@ -41,21 +48,24 @@ ssoRouter.post('/tenants', async (req, res) => {
 // V1.30.3 P0-4: SSO 租户字段白名单 (防 Mass Assignment)
 const TENANT_UPDATE_FIELDS = ['name', 'shortName', 'logo', 'industry', 'scale', 'contact', 'phone', 'plan', 'maxUsers'] as const;
 
-ssoRouter.patch('/tenants/:id', async (req, res) => {
+ssoRouter.patch('/tenants/:id', requireRole('tenant_admin'), validateBody(tenantUpdateSchema), async (req, res) => {
   try {
     const data: any = {};
     for (const f of TENANT_UPDATE_FIELDS) {
       if (req.body[f] !== undefined) data[f] = req.body[f];
     }
     const t = await prisma.tenant.update({ where: { id: req.params.id }, data });
+    recordAudit('role', t.id, 'update', null, { summary: `更新租户 ${t.code}` }, actorFromReq(req));
     res.json(t);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
 });
 
-ssoRouter.delete('/tenants/:id', async (req, res) => {
+ssoRouter.delete('/tenants/:id', requireRole('tenant_admin'), async (req, res) => {
+  const t = await prisma.tenant.findUnique({ where: { id: req.params.id }, select: { code: true, name: true } });
   await prisma.tenant.delete({ where: { id: req.params.id } });
+  recordAudit('role', req.params.id, 'delete', null, { summary: `删除租户 ${t?.code || req.params.id}` }, actorFromReq(req));
   res.status(204).end();
 });
 
@@ -80,7 +90,7 @@ ssoRouter.get('/tenants/:tenantId/settings', async (req, res) => {
   }));
 });
 
-ssoRouter.put('/tenants/:tenantId/settings/:provider', async (req, res) => {
+ssoRouter.put('/tenants/:tenantId/settings/:provider', requireRole('tenant_admin'), validateBody(ssoSettingsSchema), async (req, res) => {
   try {
     const { enabled, appId, appSecret, redirectUri, corpId, agentId, config } = req.body;
     // 加密 appSecret 存储
@@ -93,6 +103,7 @@ ssoRouter.put('/tenants/:tenantId/settings/:provider', async (req, res) => {
         enabled, appId, appSecret: encryptedSecret, redirectUri, corpId, agentId, config: config || '{}',
       },
     });
+    recordAudit('role', s.id, 'update', null, { summary: `更新 SSO 配置: ${req.params.provider} (租户 ${req.params.tenantId})` }, actorFromReq(req));
     // 返回时解密并脱敏
     const decrypted = s.appSecret ? decrypt(s.appSecret) : '';
     res.json({ ...s, appSecret: decrypted ? '***' + decrypted.slice(-4) : '' });
@@ -101,10 +112,11 @@ ssoRouter.put('/tenants/:tenantId/settings/:provider', async (req, res) => {
   }
 });
 
-ssoRouter.delete('/tenants/:tenantId/settings/:provider', async (req, res) => {
+ssoRouter.delete('/tenants/:tenantId/settings/:provider', requireRole('tenant_admin'), async (req, res) => {
   await prisma.sSOSetting.delete({
     where: { tenantId_provider: { tenantId: req.params.tenantId, provider: req.params.provider } },
   });
+  recordAudit('role', req.params.tenantId, 'delete', null, { summary: `删除 SSO 配置: ${req.params.provider}` }, actorFromReq(req));
   res.status(204).end();
 });
 
@@ -141,8 +153,12 @@ ssoRouter.get('/oauth/:provider/login', async (req, res) => {
   }
 });
 
-// 通用：模拟 SSO 登录（演示用，生产要走真实 OAuth 流程）
-ssoRouter.post('/oauth/:provider/demo-login', async (req, res) => {
+// 通用：模拟 SSO 登录（仅开发/演示环境可用，生产环境禁用）
+ssoRouter.post('/oauth/:provider/demo-login', validateBody(ssoDemoLoginSchema), async (req, res) => {
+  // P0-1: 生产环境禁用 demo-login，防止认证后门
+  if (IS_PRODUCTION) {
+    return res.status(404).json({ error: '该端点在生产环境不可用，请使用真实 SSO OAuth 流程' });
+  }
   try {
     const { tenantId, openId, userName, email } = req.body;
     if (!tenantId || !openId) return res.status(400).json({ error: 'tenantId and openId required' });
@@ -150,14 +166,15 @@ ssoRouter.post('/oauth/:provider/demo-login', async (req, res) => {
     // 1. 查找或创建用户
     let user = await prisma.user.findFirst({ where: { tenantId, feishuOpenId: openId } });
     if (!user) {
-      // 默认密码 hash（演示用 'sso'）；username 用完整 openId 避免冲突
+      // P2-2: 密码走 bcrypt 而非明文
       const username = `sso_${tenantId.slice(-6)}_${openId}`;
+      const hashedPassword = await hashPassword(`sso_${openId.slice(0, 8)}`);
       user = await prisma.user.create({
         data: {
           username,
           displayName: userName || `SSO用户${openId.slice(0, 4)}`,
           email: email || null,
-          password: 'sso',
+          password: hashedPassword,
           tenantId,
           feishuOpenId: openId,
           ssoBound: true,
@@ -179,9 +196,15 @@ ssoRouter.post('/oauth/:provider/demo-login', async (req, res) => {
         ip: req.ip || '', userAgent: req.headers['user-agent'] || '',
       },
     });
+    recordAudit('auth', user.id, 'login', null, { summary: `SSO demo-login: ${user.username}` }, actorFromReq(req));
 
-    // 3. 签发 token（演示用 cuid + user.id）
-    const token = crypto.randomBytes(24).toString('hex');
+    // 3. 签发 token 并存入数据库（修复：原来未存库导致无法注销）
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenExpiresAt = new Date(Date.now() + (Number(env.TOKEN_TTL_HOURS) || 168) * 3600 * 1000);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { token, tokenExpiresAt },
+    });
 
     res.json({
       token,
@@ -245,7 +268,7 @@ ssoRouter.get('/oauth/feishu/callback', async (req, res) => {
 });
 
 // ========== 用户解绑 / 绑定 SSO ==========
-ssoRouter.post('/users/:id/bind-sso', async (req, res) => {
+ssoRouter.post('/users/:id/bind-sso', validateBody(ssoBindSchema), async (req, res) => {
   try {
     const { provider, openId } = req.body;
     const data: any = { ssoBound: true };

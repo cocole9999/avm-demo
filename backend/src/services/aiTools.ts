@@ -21,18 +21,20 @@ import {
   deleteWorkItem,
   assignIteration,
 } from './aiToolsExt';
+import { ToolDefinition, QUERY_TOOLS } from './aiToolsQuery';
+import { broadcastAll } from './wsServer';
 
-// ========== 工具注册表 ==========
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: {
-    type: 'object';
-    properties: Record<string, any>;
-    required?: string[];
-  };
-  // 简化 schema 让 LLM 更好理解
-  handler: (args: any) => Promise<any>;
+// V1.47: AI 工具修改数据后广播刷新事件，前端订阅后自动刷新相关页面
+function notifyWorkItemChanged(action: 'created' | 'updated' | 'deleted', key: string, id: string, changes?: string[]) {
+  try {
+    broadcastAll({
+      type: 'work_item_changed',
+      action,
+      key,
+      id,
+      changes: changes || [],
+    });
+  } catch { /* ws 未就绪时忽略 */ }
 }
 
 // ========== 工具 1: 列出项目 ==========
@@ -224,6 +226,7 @@ const createWorkItem: ToolDefinition = {
         planEnd: args.dueDate ? new Date(args.dueDate) : null,
       },
     });
+    notifyWorkItemChanged('created', key, item.id);
     return { ok: true, key, id: item.id, message: `已创建 ${args.type} ${key}: ${args.title}` };
   },
 };
@@ -231,7 +234,7 @@ const createWorkItem: ToolDefinition = {
 // ========== 工具 5: 更新工作项 ==========
 const updateWorkItem: ToolDefinition = {
   name: 'update_work_item',
-  description: '更新工作项的字段。可以通过 key（如 REQ-1）或 id 定位。可改：title/description/priority/status/assignee/estimate/dueDate。',
+  description: '更新工作项的字段。可以通过 key（如 REQ-1）或 id 定位。可改：title/description/priority/status/assignee/estimate/startDate/dueDate/iterationId。',
   parameters: {
     type: 'object',
     properties: {
@@ -243,7 +246,9 @@ const updateWorkItem: ToolDefinition = {
       status: { type: 'string', description: '新状态' },
       assignee: { type: 'string', description: '新负责人' },
       estimate: { type: 'number', description: '新估算工时' },
+      startDate: { type: 'string', description: '计划开始日 YYYY-MM-DD' },
       dueDate: { type: 'string', description: '新截止日 YYYY-MM-DD' },
+      iterationId: { type: 'string', description: '迭代 ID' },
     },
   },
   handler: async (args) => {
@@ -252,10 +257,14 @@ const updateWorkItem: ToolDefinition = {
     const existing = await prisma.workItem.findUnique({ where });
     if (!existing) throw new Error('工作项不存在');
     const data: any = {};
-    ['title', 'description', 'priority', 'status', 'assignee'].forEach(f => { if (args[f] !== undefined) data[f] = args[f]; });
-    if (args.estimate !== undefined) data.estimate = args.estimate;
-    if (args.dueDate !== undefined) data.planEnd = new Date(args.dueDate);
+    const changedFields: string[] = [];
+    ['title', 'description', 'priority', 'status', 'assignee'].forEach(f => { if (args[f] !== undefined) { data[f] = args[f]; changedFields.push(f); } });
+    if (args.estimate !== undefined) { data.estimate = args.estimate; changedFields.push('estimate'); }
+    if (args.startDate !== undefined) { data.planStart = new Date(args.startDate); changedFields.push('planStart'); }
+    if (args.dueDate !== undefined) { data.planEnd = new Date(args.dueDate); changedFields.push('planEnd'); }
+    if (args.iterationId !== undefined) { data.iterationId = args.iterationId || null; changedFields.push('iterationId'); }
     const item = await prisma.workItem.update({ where, data });
+    notifyWorkItemChanged('updated', item.key, item.id, changedFields);
     return { ok: true, key: item.key, message: `已更新 ${item.key}: ${item.title}` };
   },
 };
@@ -263,13 +272,14 @@ const updateWorkItem: ToolDefinition = {
 // ========== 工具 6: 列出外部依赖 ==========
 const listExternalDependencies: ToolDefinition = {
   name: 'list_external_dependencies',
-  description: '列出外部依赖（台架/实车/车模/SDB/UE/UI/标定等）。可按 type/status/projectCode/owner 过滤。常用于"哪些外部依赖未就绪"、"标定资源准备好了吗"等。',
+  description: '列出外部依赖（台架/实车/车模/SDB/UE/UI/标定等）。可按 type/status/projectCode/spaceId/owner 过滤。常用于"哪些外部依赖未就绪"、"标定资源准备好了吗"等。',
   parameters: {
     type: 'object',
     properties: {
       type: { type: 'string', description: '依赖类型：台架 / 实车 / 车模 / SDB / UE / UI / 标定 / 其他' },
       status: { type: 'string', description: '状态：pending / preparing / ready / blocked / cancelled' },
       projectCode: { type: 'string', description: '按项目编码过滤' },
+      spaceId: { type: 'string', description: '按空间 ID 过滤' },
       owner: { type: 'string', description: '按负责人/提供方过滤' },
       notReady: { type: 'boolean', description: '只看未就绪的依赖（pending/preparing/blocked），默认 false' },
       limit: { type: 'number', description: '返回数量上限，默认 50' },
@@ -280,6 +290,7 @@ const listExternalDependencies: ToolDefinition = {
     if (args.type) where.type = args.type;
     if (args.status) where.status = args.status;
     if (args.owner) where.owner = { contains: args.owner };
+    if (args.spaceId) where.spaceId = args.spaceId;
     if (args.projectCode) {
       const p = await prisma.project.findUnique({ where: { code: args.projectCode } });
       if (p) where.projectId = p.id;
@@ -415,6 +426,8 @@ export const TOOLS: ToolDefinition[] = [
   markNotificationRead, listNotifications,
   deleteWorkItem,
   assignIteration,
+  // V1.31: 全功能页面只读查询工具（让 LLM 能查到所有信息）
+  ...QUERY_TOOLS,
 ];
 
 // 把 TOOLS 转成 OpenAI function calling 格式

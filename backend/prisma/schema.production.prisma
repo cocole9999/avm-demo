@@ -333,7 +333,7 @@ model User {
   department    String?
   role          String    @default("member")
   active        Boolean   @default(true)
-  token         String?   // V1.11 登录 token (32 字节 hex)
+  token         String?   @unique  // V1.11 登录 token (P1-5: unique)
   tenantId      String?
   feishuOpenId  String?
   feishuUnionId String?

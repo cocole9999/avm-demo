@@ -10,6 +10,7 @@ import { metaApi, iterationApi, workItemApi, aiApi } from '../api';
 import type { WorkItem, Iteration } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { WorkloadByUser } from '../components/WorkloadByUser';
+import { MarkdownContent } from '../components/MarkdownContent';
 
 const REPORT_TYPE_LABEL: Record<string, string> = {
   week: '周报', month: '月报', quarter: '季报', custom: '自定义',
@@ -87,41 +88,6 @@ export function DashboardPage() {
     );
   };
 
-  // 简单 markdown 渲染（标题/列表/加粗）
-  const renderMarkdown = (md: string) => {
-    const lines = md.split('\n');
-    return lines.map((line, i) => {
-      if (line.startsWith('# ')) return <h1 key={i} style={{ fontSize: 22, marginTop: 12 }}>{line.slice(2)}</h1>;
-      if (line.startsWith('## ')) return <h2 key={i} style={{ fontSize: 18, marginTop: 16, borderBottom: '1px solid #f0f0f0', paddingBottom: 4 }}>{line.slice(3)}</h2>;
-      if (line.startsWith('### ')) return <h3 key={i} style={{ fontSize: 15, marginTop: 12, color: '#1677ff' }}>{line.slice(4)}</h3>;
-      if (line.startsWith('| ')) {
-        // 表格行
-        const cells = line.split('|').map(c => c.trim()).filter(c => c);
-        if (cells.every(c => /^[-:]+$/.test(c))) return null;
-        return <div key={i} style={{ display: 'flex', borderBottom: '1px solid #f0f0f0', padding: '4px 0' }}>{cells.map((c, j) => <div key={j} style={{ flex: 1, padding: '0 8px' }}>{renderInline(c)}</div>)}</div>;
-      }
-      if (line.match(/^[-*]\s/)) return <div key={i} style={{ paddingLeft: 16 }}>• {renderInline(line.replace(/^[-*]\s/, ''))}</div>;
-      if (/^\d+\.\s/.test(line)) return <div key={i} style={{ paddingLeft: 16 }}>{renderInline(line)}</div>;
-      if (!line.trim()) return <br key={i} />;
-      return <p key={i} style={{ margin: '4px 0' }}>{renderInline(line)}</p>;
-    });
-  };
-
-  const renderInline = (text: string) => {
-    const parts: any[] = [];
-    const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
-    let last = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) parts.push(text.slice(last, m.index));
-      if (m[1]) parts.push(<b key={parts.length}>{m[1]}</b>);
-      if (m[2]) parts.push(<code key={parts.length} style={{ background: '#f5f5f5', padding: '0 4px', borderRadius: 2 }}>{m[2]}</code>);
-      last = re.lastIndex;
-    }
-    if (last < text.length) parts.push(text.slice(last));
-    return <>{parts}</>;
-  };
-
   return (
     <div>
       <Row gutter={[16, 16]}>
@@ -179,10 +145,10 @@ export function DashboardPage() {
         }
         extra={
           <Space>
-            <Button.Group>
+            <Space.Compact>
               <Button type={reportPeriod === 'week' ? 'primary' : 'default'} size="small" onClick={() => setReportPeriod('week')}>周报</Button>
               <Button type={reportPeriod === 'month' ? 'primary' : 'default'} size="small" onClick={() => setReportPeriod('month')}>月报</Button>
-            </Button.Group>
+            </Space.Compact>
             <Button type="primary" icon={<FileTextOutlined />} onClick={generateReport} loading={generating}>
               生成{reportPeriod === 'week' ? '周' : '月'}报
             </Button>
@@ -252,7 +218,7 @@ export function DashboardPage() {
 
             {/* 折叠预览 */}
             <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #f0f0f0', borderRadius: 4, padding: '8px 12px', background: '#fff' }}>
-              {renderMarkdown(latestReport.content)}
+              <MarkdownContent content={latestReport.content} />
             </div>
           </>
         ) : (
@@ -274,7 +240,7 @@ export function DashboardPage() {
           <Skeleton active paragraph={{ rows: 12 }} />
         ) : (
           <div style={{ maxHeight: 600, overflow: 'auto', padding: '0 8px', lineHeight: 1.7 }}>
-            {renderMarkdown(report)}
+            <MarkdownContent content={report} />
           </div>
         )}
       </Modal>

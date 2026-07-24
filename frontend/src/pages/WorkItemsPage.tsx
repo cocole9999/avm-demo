@@ -18,6 +18,7 @@ import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { TableView } from '../views/TableView';
 import { KanbanView } from '../views/KanbanView';
 import { GanttView } from '../views/GanttView';
+import { useWorkItemChanged } from '../services/useWorkItemChanged';
 
 export function WorkItemsPage() {
   const { type = 'requirement' } = useParams<{ type: WorkItemType }>();
@@ -90,6 +91,8 @@ export function WorkItemsPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { metaApi.options().then(setOptions); }, []);
+  // V1.47: AI 修改工作项后自动刷新列表
+  useWorkItemChanged(() => { load(); });
 
   // 当 type 变化时清掉不适用筛选
   useEffect(() => {

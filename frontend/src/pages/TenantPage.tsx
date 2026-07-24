@@ -208,7 +208,7 @@ export function TenantPage() {
       <Modal
         open={modalOpen} title={editing ? '编辑企业' : '新建企业'}
         onCancel={() => setModalOpen(false)} onOk={submit} width={560}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" preserve={false}>
           <Form.Item name="code" label="企业代码" rules={[{ required: true, message: '请输入代码' }]}>
@@ -241,7 +241,7 @@ export function TenantPage() {
 
       <Drawer
         open={!!drawerTenant} onClose={() => setDrawerTenant(null)}
-        width={720} destroyOnClose
+        width={720} destroyOnHidden
         title={
           drawerTenant && (
             <Space>

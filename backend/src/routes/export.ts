@@ -9,8 +9,15 @@
 import { Router } from 'express';
 import * as XLSX from 'xlsx';
 import { prisma } from '../db';
+import { requireAuth, requireRole } from '../middleware/auth';
+import { recordAudit, actorFromReq } from '../utils/audit';
+import { validateQuery, exportWorkItemsSchema, exportSimpleSchema } from '../utils/validation';
 
 export const exportRouter = Router();
+
+// P1-3: 所有导出端点需 space_admin 及以上权限
+exportRouter.use(requireAuth);
+exportRouter.use(requireRole('space_admin'));
 
 function parseFormat(q: any): 'xlsx' | 'csv' {
   return q.format === 'csv' ? 'csv' : 'xlsx';
@@ -44,7 +51,7 @@ function sendFile(res: any, filename: string, format: 'xlsx' | 'csv', rows: any[
  * 导出工作项
  * 支持过滤: type, status, priority, projectCode, customerCode, assignee, keyword
  */
-exportRouter.get('/work-items', async (req, res) => {
+exportRouter.get('/work-items', validateQuery(exportWorkItemsSchema), async (req, res) => {
   try {
     const format = parseFormat(req.query);
     const where: any = {};
@@ -103,6 +110,7 @@ exportRouter.get('/work-items', async (req, res) => {
     }));
 
     const filename = `work-items-${new Date().toISOString().slice(0, 10)}`;
+    recordAudit('workItem', null, 'export', null, { summary: `导出工作项: ${rows.length} 条` }, actorFromReq(req));
     sendFile(res, filename, format, rows);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -112,7 +120,7 @@ exportRouter.get('/work-items', async (req, res) => {
 /**
  * 导出项目
  */
-exportRouter.get('/projects', async (req, res) => {
+exportRouter.get('/projects', validateQuery(exportSimpleSchema), async (req, res) => {
   try {
     const format = parseFormat(req.query);
     const items = await prisma.project.findMany({
@@ -157,7 +165,7 @@ exportRouter.get('/projects', async (req, res) => {
 /**
  * 导出客户
  */
-exportRouter.get('/customers', async (req, res) => {
+exportRouter.get('/customers', validateQuery(exportSimpleSchema), async (req, res) => {
   try {
     const format = parseFormat(req.query);
     const items = await prisma.customer.findMany({
@@ -194,7 +202,7 @@ exportRouter.get('/customers', async (req, res) => {
 /**
  * 导出车型
  */
-exportRouter.get('/car-models', async (req, res) => {
+exportRouter.get('/car-models', validateQuery(exportSimpleSchema), async (req, res) => {
   try {
     const format = parseFormat(req.query);
     const items = await prisma.carModel.findMany({
@@ -228,7 +236,7 @@ exportRouter.get('/car-models', async (req, res) => {
 /**
  * 导出风险预警（最近 30 天）
  */
-exportRouter.get('/risks', async (_req, res) => {
+exportRouter.get('/risks', validateQuery(exportSimpleSchema), async (_req, res) => {
   try {
     const format = parseFormat(_req.query);
     const since = new Date(Date.now() - 30 * 86400000);

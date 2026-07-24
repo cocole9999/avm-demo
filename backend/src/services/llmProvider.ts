@@ -46,47 +46,65 @@ export interface LLMProvider {
 }
 
 // ========== Provider 元数据（供前端展示） ==========
+// 模型能力标识：vision = 支持图片输入
+export function modelSupportsVision(model: string): boolean {
+  const m = (model || '').toLowerCase();
+  return m.includes('vision') || m.includes('vl') || m.includes('gpt-4o') || m.includes('claude-3')
+    || m.includes('gemini') || m.includes('qwen-vl') || m.includes('glm-4v')
+    || m.includes('doubao-vision') || m.includes('minimax-vl');
+}
+
 // 模型列表更新到 2026 Q2 主流最新
 export const PROVIDERS = [
   {
     key: 'openai', name: 'OpenAI', logo: '🟢', defaultBaseUrl: 'https://api.openai.com/v1', defaultModel: 'gpt-4.1', protocol: 'openai',
+    capabilities: { vision: true, file: true },
     models: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o4-mini', 'o3', 'o3-mini', 'o1', 'o1-mini', 'o1-pro', 'gpt-5', 'gpt-5-mini', 'gpt-4-turbo'],
   },
   {
     key: 'anthropic', name: 'Anthropic Claude', logo: '🟠', defaultBaseUrl: 'https://api.anthropic.com/v1', defaultModel: 'claude-sonnet-4-5', protocol: 'anthropic',
+    capabilities: { vision: true, file: true },
     models: ['claude-sonnet-4-5', 'claude-opus-4-1', 'claude-sonnet-4', 'claude-opus-4', 'claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
   },
   {
     key: 'deepseek', name: 'DeepSeek', logo: '🔵', defaultBaseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-v4-pro', protocol: 'openai',
+    capabilities: { vision: false, file: false },
     // 移除 v3 老模型 (deepseek-chat/coder/reasoner) — API 已升级 v4，老模型名调用时被服务端 fallback
     models: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-coder', 'deepseek-v4-reasoner'],
   },
   {
     key: 'MiniMax', name: 'MiniMax', logo: '🟧', defaultBaseUrl: 'https://api.MiniMax.chat/v1', defaultModel: 'MiniMax-Text-01', protocol: 'openai',
+    capabilities: { vision: true, file: false },
     models: ['MiniMax-Text-01', 'MiniMax-2.5', 'MiniMax-2.0', 'MiniMax-VL-01', 'MiniMax-2.7', 'abab-7-chat'],
   },
   {
     key: 'qwen', name: '通义千问 Qwen', logo: '🟣', defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen3-max', protocol: 'openai',
+    capabilities: { vision: true, file: true },
     models: ['qwen3-max', 'qwen3-plus', 'qwen3-turbo', 'qwen3-coder-plus', 'qwen3-235b-a22b', 'qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen-long', 'qwen-coder-plus', 'qwen-vl-max', 'qwen-vl-plus'],
   },
   {
     key: 'glm', name: '智谱 GLM', logo: '🟡', defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-4.6', protocol: 'openai',
+    capabilities: { vision: true, file: false },
     models: ['glm-4.6', 'glm-4.5', 'glm-4.5-air', 'glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-4-long', 'glm-z1-air', 'codegeex-4'],
   },
   {
     key: 'moonshot', name: '月之暗面 Kimi', logo: '⚪', defaultBaseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'kimi-k2-0711-preview', protocol: 'openai',
+    capabilities: { vision: false, file: true },
     models: ['kimi-k2-0711-preview', 'kimi-k2', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'moonshot-v1-auto'],
   },
   {
     key: 'doubao', name: '字节豆包', logo: '🟤', defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-1-5-pro-32k', protocol: 'openai',
-    models: ['doubao-1-5-pro-32k', 'doubao-1-5-pro-256k', 'doubao-1-5-lite-32k', 'doubao-1-5-thinking-pro', 'doubao-pro-32k', 'doubao-pro-128k', 'doubao-lite-32k'],
+    capabilities: { vision: true, file: false },
+    models: ['doubao-1-5-pro-32k', 'doubao-1-5-pro-256k', 'doubao-1-5-lite-32k', 'doubao-1-5-thinking-pro', 'doubao-pro-32k', 'doubao-pro-128k', 'doubao-lite-32k', 'Doubao-Seed-2.1-Pro', 'Doubao-Seed-2.1-lite'],
   },
   {
     key: 'ollama', name: 'Ollama (本地)', logo: '⚫', defaultBaseUrl: 'http://localhost:11434/v1', defaultModel: 'llama3.3', protocol: 'openai',
+    capabilities: { vision: false, file: false },
     models: ['llama3.3', 'llama3.2', 'qwen3', 'qwen2.5', 'mistral', 'mixtral', 'gemma3', 'phi4', 'codellama', 'deepseek-r1', 'deepseek-coder-v2'],
   },
   {
     key: 'custom', name: '自定义 OpenAI 兼容', logo: '🔘', defaultBaseUrl: '', defaultModel: '', protocol: 'openai',
+    capabilities: { vision: false, file: false },
     models: [],
   },
 ];

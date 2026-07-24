@@ -13,6 +13,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { workbenchApi, type WorkbenchData } from '../api';
 import { useAuth } from '../AuthContext';
+import { useWorkItemChanged } from '../services/useWorkItemChanged';
 
 const cardStyle: React.CSSProperties = { borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' };
 const headerStyle: React.CSSProperties = { fontSize: 15, fontWeight: 500, paddingBottom: 8 };
@@ -53,6 +54,14 @@ export function WorkbenchPage({ userId }: Props) {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [userId]);
+
+  // V1.47: AI 修改工作项后自动刷新工作台
+  useWorkItemChanged(() => {
+    if (!effectiveUserId) return;
+    workbenchApi.me(effectiveUserId)
+      .then(setData)
+      .catch(console.error);
+  });
 
   if (loading) {
     return (
