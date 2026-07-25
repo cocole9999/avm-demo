@@ -19,7 +19,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Form, App } from 'antd';
+import type { FormInstance } from 'antd';
 import { notifyApiError } from '../utils/apiError';
+import { useFormUndoRedo } from './useFormUndoRedo';
+import type { FormUndoRedoApi } from './useFormUndoRedo';
 
 export interface CrudApi<T = any, Q = any> {
   list: (params?: Q) => Promise<T[]>;
@@ -55,7 +58,7 @@ export interface UseCrudResourceResult<T = any> {
   submitting: boolean;
   reload: () => Promise<void>;
   editing: T | null;
-  form: ReturnType<typeof Form.useForm>[0];
+  form: FormInstance<any>;
   drawerOpen: boolean;
   openCreate: () => void;
   openEdit: (record: T) => void;
@@ -63,6 +66,8 @@ export interface UseCrudResourceResult<T = any> {
   handleSubmit: () => Promise<void>;
   handleDelete: (id: string) => Promise<void>;
   setList: React.Dispatch<React.SetStateAction<T[]>>;
+  /** V1.53: 表单撤销/重做 API */
+  formUndoRedo: FormUndoRedoApi;
 }
 
 export function useCrudResource<T = any, Q = any>(
@@ -82,6 +87,7 @@ export function useCrudResource<T = any, Q = any>(
 
   const { message } = App.useApp();
   const [form] = Form.useForm();
+  const formUndoRedo = useFormUndoRedo(form);
   const [list, setList] = useState<T[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -104,17 +110,24 @@ export function useCrudResource<T = any, Q = any>(
   const openCreate = useCallback(() => {
     setEditing(null);
     form.resetFields();
+    formUndoRedo.clear();
     if (initialFormValues) form.setFieldsValue(initialFormValues);
     setDrawerOpen(true);
-  }, [form, initialFormValues]);
+  }, [form, formUndoRedo, initialFormValues]);
 
   const openEdit = useCallback((record: T) => {
     setEditing(record);
+    formUndoRedo.clear();
+    // 先设置初始值，再初始化 prevValues（避免首次变更被误判为无旧值）
     form.setFieldsValue(record as any);
+    formUndoRedo.init(record as any);
     setDrawerOpen(true);
-  }, [form]);
+  }, [form, formUndoRedo]);
 
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false);
+    formUndoRedo.clear();
+  }, [formUndoRedo]);
 
   const handleSubmit = useCallback(async () => {
     // P0-6 防重复点击：提交中直接返回，避免重复创建
@@ -172,5 +185,6 @@ export function useCrudResource<T = any, Q = any>(
     handleSubmit,
     handleDelete,
     setList,
+    formUndoRedo,
   };
 }

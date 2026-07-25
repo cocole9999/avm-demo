@@ -8,6 +8,7 @@ import ReactECharts from 'echarts-for-react';
 import { Spin, Empty, Tag, Space, Slider, Button, message } from 'antd';
 import { ShareAltOutlined } from '@ant-design/icons';
 import { workItemApi, api } from '../api';
+import { useThemeMode } from '../ThemeContext';
 
 interface Node { id: string; key: string; title: string; status: string; type: string; priority?: string; kind?: string; owner?: string; expectedDate?: string | null; blocker?: string }
 interface Edge { from: string; to: string; relationType: string }
@@ -33,6 +34,7 @@ export function DependencyGraph({ workItemId }: { workItemId: string }) {
   const [data, setData] = useState<{ nodes: Node[]; edges: Edge[]; rootId: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [depth, setDepth] = useState(3);
+  const { isDark } = useThemeMode();
 
   const load = (d: number) => {
     setLoading(true);
@@ -92,7 +94,7 @@ export function DependencyGraph({ workItemId }: { workItemId: string }) {
         <Button size="small" icon={<ShareAltOutlined />} onClick={() => load(depth)}>刷新</Button>
       </Space>
       <div style={{ border: '1px solid #f0f0f0', borderRadius: 4, padding: 8 }}>
-        <ReactECharts option={option} style={{ height: 480 }} notMerge lazyUpdate />
+        <ReactECharts option={option} style={{ height: 480 }} notMerge lazyUpdate theme={isDark ? 'dark' : undefined} />
       </div>
     </div>
   );

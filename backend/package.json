@@ -1,7 +1,7 @@
 {
   "name": "avm-backend",
-  "version": "1.46.0",
-  "description": "AVM Project Center - Backend (V1.46: 商用加固 - 监控/测试/工程化)",
+  "version": "1.52.0",
+  "description": "AVM Project Center - Backend (V1.52: 通知闭环与团队共享筛选)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

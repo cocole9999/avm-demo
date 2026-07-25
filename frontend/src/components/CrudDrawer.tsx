@@ -21,8 +21,8 @@
  *     <Form form={form} layout="vertical">...</Form>
  *   </CrudDrawer>
  */
-import { Drawer, Modal, Space, Button } from 'antd';
-import { ThunderboltOutlined } from '@ant-design/icons';
+import { Drawer, Modal, Space, Button, Tooltip } from 'antd';
+import { ThunderboltOutlined, UndoOutlined, RedoOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 
 export interface CrudDrawerProps {
@@ -42,6 +42,11 @@ export interface CrudDrawerProps {
   /** Drawer forceRender（默认 true，保证 Form 提前挂载） */
   forceRender?: boolean;
   extraFooter?: ReactNode;
+  /** V1.53: 表单撤销/重做 */
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
   children: ReactNode;
 }
 
@@ -58,11 +63,26 @@ export function CrudDrawer({
   useModal = false,
   forceRender = true,
   extraFooter,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   children,
 }: CrudDrawerProps) {
   const resolvedTitle = typeof title === 'function' ? title(editing) : title;
   const footer = (
     <Space>
+      {/* V1.53: 表单撤销/重做（仅编辑模式显示） */}
+      {editing && onUndo && (
+        <Tooltip title="撤销 (Ctrl+Z)">
+          <Button icon={<UndoOutlined />} onClick={onUndo} disabled={!canUndo} />
+        </Tooltip>
+      )}
+      {editing && onRedo && (
+        <Tooltip title="重做 (Ctrl+Y)">
+          <Button icon={<RedoOutlined />} onClick={onRedo} disabled={!canRedo} />
+        </Tooltip>
+      )}
       {onAiFill && (
         <Button icon={<ThunderboltOutlined />} onClick={onAiFill} loading={aiFilling}>
           AI 帮我填

@@ -8,7 +8,7 @@
  *   - 使用 StatsBar / FilterBar / CrudDrawer / buildActionColumns 组件
  *   - 状态/细分市场色从 constants/enumMetadata 引入
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Card, Table, Tag, Space, Button, Input, Select, Form,
   Row, Col, Avatar, Tooltip,
@@ -50,6 +50,7 @@ export function CarModelPage() {
     list, loading, reload, submitting,
     editing, form, drawerOpen,
     openCreate, openEdit, closeDrawer, handleSubmit, handleDelete,
+    formUndoRedo,
   } = useCrudResource<CarModel>({
     api: carModelApi,
     entityName: '车型',
@@ -57,6 +58,23 @@ export function CarModelPage() {
     queryDeps: [q, brandFilter, statusFilter],
     queryBuilder,
   });
+
+  // V1.53: 全局键盘快捷键（Ctrl+Z / Ctrl+Y）用于表单撤销/重做
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        formUndoRedo.undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        formUndoRedo.redo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [drawerOpen, formUndoRedo]);
 
   // 品牌分布单独加载
   const { data: byBrand, reload: reloadByBrand } = useAsync(
@@ -247,8 +265,12 @@ export function CarModelPage() {
         submitting={submitting}
         onAiFill={handleAiFill}
         aiFilling={aiFilling}
+        onUndo={formUndoRedo.undo}
+        onRedo={formUndoRedo.redo}
+        canUndo={formUndoRedo.canUndo}
+        canRedo={formUndoRedo.canRedo}
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onValuesChange={formUndoRedo.recordChange}>
           <Form.Item name="code" label="车型编号" rules={[{ required: true }]}>
             <Input placeholder="如 GALAXY-L7" />
           </Form.Item>

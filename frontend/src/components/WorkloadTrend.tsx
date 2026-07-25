@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Spin } from 'antd';
 import { workItemApi } from '../api';
+import { useThemeMode } from '../ThemeContext';
 
 interface Point {
   date: string;
@@ -18,6 +19,7 @@ interface Point {
 export function WorkloadTrend({ workItemId }: { workItemId: string }) {
   const [points, setPoints] = useState<Point[]>([]);
   const [loading, setLoading] = useState(true);
+  const { isDark } = useThemeMode();
 
   useEffect(() => {
     setLoading(true);
@@ -68,7 +70,7 @@ export function WorkloadTrend({ workItemId }: { workItemId: string }) {
 
   return (
     <div style={{ marginTop: 8 }}>
-      <ReactECharts option={option} style={{ height: 180 }} notMerge lazyUpdate />
+      <ReactECharts option={option} style={{ height: 180 }} notMerge lazyUpdate theme={isDark ? 'dark' : undefined} />
     </div>
   );
 }

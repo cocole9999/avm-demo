@@ -35,7 +35,10 @@ export interface LoadingStateProps {
 export function LoadingState({ tip = '加载中...', size = 'default', minHeight = 200 }: LoadingStateProps) {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight }}>
-      <Spin tip={tip} size={size} />
+      <Spin tip={tip} size={size}>
+        {/* antd Spin tip 仅在嵌套模式下生效，需要一个非空 children */}
+        <div style={{ padding: 40 }} />
+      </Spin>
     </div>
   );
 }

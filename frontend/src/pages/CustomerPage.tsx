@@ -11,7 +11,7 @@
  *   - 使用 StatsBar / FilterBar / CrudDrawer / buildActionColumns 组件
  *   - 状态色/标签从 constants/enumMetadata 引入，消除散落定义
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Card, Table, Tag, Space, Button, Input, Select, Form, App,
   Tabs, Row, Col, Avatar, Empty, Tooltip, Badge,
@@ -60,6 +60,7 @@ export function CustomerPage() {
     list, loading, reload, submitting,
     editing, form, drawerOpen,
     openCreate, openEdit, closeDrawer, handleSubmit, handleDelete,
+    formUndoRedo,
   } = useCrudResource<Customer>({
     api: customerApi,
     entityName: '客户',
@@ -67,6 +68,23 @@ export function CustomerPage() {
     queryDeps: [q, statusFilter, typeFilter],
     queryBuilder,
   });
+
+  // V1.53: 全局键盘快捷键（Ctrl+Z / Ctrl+Y）用于表单撤销/重做
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        formUndoRedo.undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        formUndoRedo.redo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [drawerOpen, formUndoRedo]);
 
   // 客户统计单独加载（useCrudResource 只负责 list）
   const { data: stats, reload: reloadStats } = useAsync(
@@ -251,12 +269,16 @@ export function CustomerPage() {
         submitting={submitting}
         onAiFill={handleAiFill}
         aiFilling={aiFilling}
+        onUndo={formUndoRedo.undo}
+        onRedo={formUndoRedo.redo}
+        canUndo={formUndoRedo.canUndo}
+        canRedo={formUndoRedo.canRedo}
       >
         {editing && (
           <CustomerDetail customer={editing} activeTab={activeTab} setActiveTab={setActiveTab} />
         )}
         {!editing && (
-          <Form form={form} layout="vertical">
+          <Form form={form} layout="vertical" onValuesChange={formUndoRedo.recordChange}>
             <Form.Item name="code" label="客户编号" rules={[{ required: true }]}>
               <Input placeholder="如 GEELY-GALAXY-L7" />
             </Form.Item>

@@ -8,6 +8,7 @@ import ReactECharts from 'echarts-for-react';
 import { Select, Spin, Empty, Card, Space, Tag } from 'antd';
 import { iterationApi, api } from '../api';
 import { useWorkItemChanged } from '../services/useWorkItemChanged';
+import { useThemeMode } from '../ThemeContext';
 
 interface BurndownData {
   iteration: { id: string; name: string; startDate: string; endDate: string; totalEstimate: number };
@@ -19,6 +20,7 @@ export function BurndownChart() {
   const [selected, setSelected] = useState<string | undefined>();
   const [data, setData] = useState<BurndownData | null>(null);
   const [loading, setLoading] = useState(false);
+  const { isDark } = useThemeMode();
 
   useEffect(() => {
     iterationApi.list().then((list: any[]) => {
@@ -86,7 +88,7 @@ export function BurndownChart() {
             <div style={{ fontSize: 11, color: '#666', marginBottom: 8 }}>
               总估分: <b>{data.iteration.totalEstimate}h</b> · 周期: {data.iteration.startDate.slice(0, 10)} ~ {data.iteration.endDate.slice(0, 10)}
             </div>
-            <ReactECharts option={option} style={{ height: 280 }} notMerge lazyUpdate />
+            <ReactECharts option={option} style={{ height: 280 }} notMerge lazyUpdate theme={isDark ? 'dark' : undefined} />
           </>}
     </Card>
   );

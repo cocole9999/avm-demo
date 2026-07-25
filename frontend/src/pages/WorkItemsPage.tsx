@@ -8,7 +8,7 @@ import {
   PlusOutlined, ReloadOutlined, FilterOutlined, TableOutlined, DownloadOutlined,
   AppstoreOutlined, BarChartOutlined, MoreOutlined, DeleteOutlined,
   RobotOutlined, HolderOutlined,
-  ThunderboltOutlined,
+  ThunderboltOutlined, UndoOutlined, RedoOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { workItemApi, metaApi, aiApi } from '../api';
@@ -17,6 +17,7 @@ import { notifyApiError } from '../utils/apiError';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useUrlState } from '../hooks/useUrlState';
 import { useSavedFilters } from '../hooks/useSavedFilters';
+import { useOperationUndo } from '../hooks/useOperationUndo';
 import type { WorkItem, WorkItemType, MetaOptions } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { TableView } from '../views/TableView';
@@ -59,6 +60,10 @@ export function WorkItemsPage() {
   const [saveFilterName, setSaveFilterName] = useState('');
   const [saveFilterShared, setSaveFilterShared] = useState(false);
 
+  // V1.53: 看板拖拽撤销/重做
+  interface StatusChangeOp { id: string; oldStatus: string; newStatus: string; }
+  const kanbanUndo = useOperationUndo<StatusChangeOp>(30);
+
   const handleExport = async (format: 'xlsx' | 'csv') => {
     setExporting(true);
     try {
@@ -99,6 +104,49 @@ export function WorkItemsPage() {
   useEffect(() => { metaApi.options().then(setOptions); }, []);
   // V1.47: AI 修改工作项后自动刷新列表
   useWorkItemChanged(() => { load(); });
+
+  // V1.53: 看板撤销/重做处理函数（依赖 load，必须在 load 之后声明）
+  const handleKanbanUndo = useCallback(async () => {
+    const op = kanbanUndo.undo();
+    if (!op) return;
+    try {
+      await workItemApi.update(op.id, { status: op.oldStatus });
+      message.success(`已撤销: ${op.newStatus} → ${op.oldStatus}`);
+      load();
+    } catch (e) {
+      notifyApiError(e, '撤销失败：');
+      // 失败时回退操作栈
+      kanbanUndo.push(op);
+    }
+  }, [kanbanUndo, load]);
+
+  const handleKanbanRedo = useCallback(async () => {
+    const op = kanbanUndo.redo();
+    if (!op) return;
+    try {
+      await workItemApi.update(op.id, { status: op.newStatus });
+      message.success(`已重做: ${op.oldStatus} → ${op.newStatus}`);
+      load();
+    } catch (e) {
+      notifyApiError(e, '重做失败：');
+    }
+  }, [kanbanUndo, load]);
+
+  // V1.53: 看板撤销/重做键盘快捷键
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleKanbanUndo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleKanbanRedo();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleKanbanUndo, handleKanbanRedo]);
 
   // 当 type 变化时清掉不适用筛选
   useEffect(() => {
@@ -243,8 +291,14 @@ export function WorkItemsPage() {
   };
 
   const handleStatusChange = async (id: string, status: string) => {
+    const item = items.find(i => i.id === id);
+    const oldStatus = item?.status;
     try {
       await workItemApi.update(id, { status });
+      // 记录操作到撤销栈（API 成功后）
+      if (oldStatus && oldStatus !== status) {
+        kanbanUndo.push({ id, oldStatus, newStatus: status });
+      }
       message.success(`已流转到 ${status}`);
       load();
     } catch (e) {
@@ -309,6 +363,13 @@ export function WorkItemsPage() {
             options={[...new Set(items.map(i => i.assignee).filter(Boolean))].map(a => ({ value: a, label: a }))}
           />
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+          {/* V1.53: 看板拖拽撤销/重做按钮 */}
+          <Tooltip title="撤销最近拖拽 (Ctrl+Z)">
+            <Button icon={<UndoOutlined />} onClick={handleKanbanUndo} disabled={!kanbanUndo.canUndo} />
+          </Tooltip>
+          <Tooltip title="重做 (Ctrl+Y)">
+            <Button icon={<RedoOutlined />} onClick={handleKanbanRedo} disabled={!kanbanUndo.canRedo} />
+          </Tooltip>
           {/* V1.50: 保存当前筛选 + V1.52: 团队共享（已抽到 SavedFilterButton 组件） */}
           <SavedFilterButton
             currentFilters={currentFilters}

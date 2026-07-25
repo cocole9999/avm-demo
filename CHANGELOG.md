@@ -2,6 +2,55 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.52] - 2026-07-25
+
+### 通知闭环与团队协作
+
+- **关注通知闭环** — `notifyStatusChange` + `notifyNewComment`，工作项状态变更/新评论时通知关注者，通过 DB + WebSocket + Webhook 多渠道推送
+- **团队共享筛选** — 新增 `SavedFilter` 数据模型 + API，`useSavedFilters` Hook 升级双写（localStorage 离线 + 云端持久化），支持团队共享
+- **通用筛选按钮组件** — `SavedFilterButton` 抽取复用，8 个 CRUD 页接入（Project/Users/Tenant/Flows/Reviews/Dashboards/Fields/WorkItems）
+- **通知渲染** — NotificationsPage + App.tsx 新增 `watch_status_change` / `watch_comment_added` 类型渲染
+
+### 修复
+
+- 替换废弃的 `destroyTooltipOnHide` 为 `destroyOnHidden`（antd v5 兼容）
+
+## [V1.51] - 2026-07-25
+
+### 协作与沟通增强
+
+- **评论 Emoji 反应** — 12 个内置表情 + Popover 选择器 + 用户列表 Tooltip
+- **拖拽上传** — `dragCounter` 状态机 + 蓝色虚线覆盖层
+- **粘贴上传** — `onPaste` 自动命名 `pasted_{ts}.png`
+- **工作项订阅/关注** — `WorkItemWatcher` 模型 + 4 个 watch API + 关注按钮 + "我的关注"页面
+- **保存筛选条件** — `useSavedFilters` Hook + localStorage 命名空间隔离
+
+## [V1.50] - 2026-07-25
+
+### AI 能力增强
+
+- **AI 长评论摘要** — `summarize-comments` 端点 + `CommentSummaryCard`（决策/问题/行动三列）
+- **AI 自然语言搜索** — `nl-search` 端点 + 顶栏 NL 模式
+- **AI 重复 Bug 检测** — `check-duplicate-bug` 端点 + `DuplicateBugAlert`（加权相似度）
+- **AI 自动分类** — `auto-classify` 合并 `aiFill` + `aiSuggestAssignee`
+- **GlobalAIAssistant 上下文记忆** — pathname + 中文页面名注入，MAX_CONTEXT 从 10 增至 20
+- **风险预警增强** — Top N=5 + 红点 Badge + 跳转详情
+- **周报布局优化** — 关键摘要 section + emoji 徽章
+
+## [V1.49] - 2026-07-25
+
+### 拖拽粘贴与实时协作
+
+- **通用拖拽/粘贴上传 Hook** — `useDragPasteUpload` 抽取复用，支持图片/文件类型限制
+- **工作项自动编号链接** — REQ/TASK/BUG/REL 自动链接，覆盖 Markdown/简单 Markdown/评论渲染
+- **暗色主题切换** — `ThemeContext` + localStorage 持久化 + 系统偏好跟随
+- **撤销/重做 Hook** — `useUndoableState`，50 栈深度 + 同步
+
+### 修复
+
+- 修复 `RiskAlertPanel`/`ReportGenerator`/`DashboardPage` tsc 错误
+- 删除 `AI 一键生成报告` 按钮与 `ReportGenerator` Modal（与 AI 周报/月报功能重复）
+
 ## [V1.48] - 2026-07-25
 
 ### 安全修复 (P0)

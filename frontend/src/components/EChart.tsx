@@ -10,6 +10,7 @@ import {
   RadarComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
+import { useThemeMode } from '../ThemeContext';
 
 echarts.use([
   LineChart,
@@ -34,14 +35,15 @@ interface Props {
   height?: number | string;
 }
 
-// 通用 ECharts 包装组件
+// 通用 ECharts 包装组件（V1.53: 支持暗色主题）
 export function EChart({ option, style, height = 300 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  const { isDark } = useThemeMode();
 
   useEffect(() => {
     if (!ref.current) return;
-    chartRef.current = echarts.init(ref.current);
+    chartRef.current = echarts.init(ref.current, isDark ? 'dark' : undefined);
     const resize = () => chartRef.current?.resize();
     window.addEventListener('resize', resize);
     return () => {
@@ -49,7 +51,7 @@ export function EChart({ option, style, height = 300 }: Props) {
       chartRef.current?.dispose();
       chartRef.current = null;
     };
-  }, []);
+  }, [isDark]);
 
   useEffect(() => {
     if (chartRef.current && option) {

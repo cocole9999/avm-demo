@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { Select, Spin, Empty, Card, Space, Tag } from 'antd';
 import { workItemApi, projectApi, iterationApi } from '../api';
+import { useThemeMode } from '../ThemeContext';
 
 export function WorkloadByUser() {
   const [data, setData] = useState<{ byUser: any[]; totalItems: number } | null>(null);
@@ -15,6 +16,7 @@ export function WorkloadByUser() {
   const [iterations, setIterations] = useState<any[]>([]);
   const [projectCode, setProjectCode] = useState<string | undefined>();
   const [iterationId, setIterationId] = useState<string | undefined>();
+  const { isDark } = useThemeMode();
 
   useEffect(() => {
     projectApi.list().then((list: any[]) => setProjects(list.map((p: any) => ({ value: p.code, label: p.code })))).catch(() => {});
@@ -89,7 +91,7 @@ export function WorkloadByUser() {
         </Space>
       }
     >
-      <ReactECharts option={option} style={{ height: 280 }} notMerge lazyUpdate />
+      <ReactECharts option={option} style={{ height: 280 }} notMerge lazyUpdate theme={isDark ? 'dark' : undefined} />
     </Card>
   );
 }
