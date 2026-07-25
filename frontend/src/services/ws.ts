@@ -18,8 +18,8 @@ type WSMessage = { type: string; [k: string]: any };
 type Handler = (msg: WSMessage) => void;
 type WsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed';
 
-// V1.48: WS 端口可配置（开发 4001，生产通常与 API 同源通过 nginx 反代）
-const WS_PORT = import.meta.env.VITE_WS_PORT || '4001';
+// V1.48: WS 端口可配置（开发 4001，生产留空走同源 nginx 反代）
+const WS_PORT = import.meta.env.VITE_WS_PORT || '';
 
 class WsClient {
   private ws: WebSocket | null = null;
@@ -36,10 +36,10 @@ class WsClient {
   /** 建立连接 (有 token 立即连接) */
   connect(token: string) {
     this.token = token;
-    // 自动探测 host (从 location.host 拿 hostname, port 由 VITE_WS_PORT 配置)
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = location.hostname || '127.0.0.1';
-    this.url = `${proto}//${host}:${WS_PORT}/api/ws?token=${encodeURIComponent(token)}`;
+    // VITE_WS_PORT 有值时用 hostname+指定端口（开发模式），无值时用同源 host（生产走 nginx 反代）
+    const wsHost = WS_PORT ? `${location.hostname}:${WS_PORT}` : location.host;
+    this.url = `${proto}//${wsHost}/api/ws?token=${encodeURIComponent(token)}`;
     this.stopped = false;
     this.open();
   }

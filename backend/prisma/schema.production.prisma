@@ -55,6 +55,7 @@ model WorkItem {
   customer      Customer?          @relation(fields: [customerId], references: [id])
   relatedTo     WorkItemRelation[] @relation("RelationTo")
   relatedFrom   WorkItemRelation[] @relation("RelationFrom")
+  watchers      WorkItemWatcher[]
 
   @@index([type])
   @@index([status])
@@ -80,6 +81,37 @@ model WorkItemRelation {
   from         WorkItem @relation("RelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
 
   @@unique([fromId, toId, relationType])
+}
+
+// V1.51 工作项订阅/关注 — 用户关注后获得状态/评论变更通知
+model WorkItemWatcher {
+  id         String   @id @default(cuid())
+  workItemId String
+  userId     String
+  userName   String   // 冗余便于通知展示
+  createdAt  DateTime @default(now())
+  workItem   WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@unique([workItemId, userId])
+  @@index([userId])
+  @@index([workItemId])
+}
+
+// V1.52 团队共享筛选 — localStorage 升级为后端存储，支持跨设备/团队共享
+model SavedFilter {
+  id          String   @id @default(cuid())
+  resourceKey String   // 资源命名空间，如 'work-items-requirement'
+  name        String
+  filters     String   // JSON 序列化的筛选条件
+  shared      Boolean  @default(false) // 团队共享开关
+  ownerId     String   // 创建人 user.id
+  ownerName   String   // 冗余便于展示
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([resourceKey, ownerId, name]) // 同人同资源不重名
+  @@index([resourceKey, shared])
+  @@index([ownerId])
 }
 
 model Iteration {
@@ -127,7 +159,7 @@ model Activity {
 // V1.13 全系统审计日志（区别于 Activity：覆盖所有实体，PM 合规追溯用）
 model AuditLog {
   id        String   @id @default(cuid())
-  entity    String   // 'project' | 'customer' | 'workItem' | 'carModel' | 'contact' | 'dependency' | 'user' | 'webhook' | 'automation' | 'import' | 'handover' | 'auth'
+  entity    String   // 'project' | 'customer' | 'workItem' | 'carModel' | 'contact' | 'dependency' | 'user' | 'webhook' | 'automation' | 'import' | 'handover' | 'auth' | 'savedFilter'
   entityId  String   // 实体主键
   action    String   // 'create' | 'update' | 'delete' | 'login' | 'logout' | 'import' | 'export' | 'status_change' | ...
   actor     String   // 操作人 username (登录前为 'anonymous' / 'system')
@@ -334,6 +366,7 @@ model User {
   role          String    @default("member")
   active        Boolean   @default(true)
   token         String?   @unique  // V1.11 登录 token (P1-5: unique)
+  tokenExpiresAt DateTime? // V1.30 token 过期时间 (TTL 来自 env.TOKEN_TTL_HOURS)
   tenantId      String?
   feishuOpenId  String?
   feishuUnionId String?
@@ -350,6 +383,7 @@ model User {
   @@index([feishuOpenId])
   @@index([feishuUnionId])
   @@index([token])
+  @@index([tokenExpiresAt])  // V1.30 用于定期清理过期 token
 }
 
 model Space {
