@@ -2,6 +2,38 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.54] - 2026-07-25
+
+### 安全依赖与基线加固
+
+#### 安全修复
+- **xlsx → exceljs 迁移** — 移除 `xlsx@0.18.5`（已知原型污染 + ReDoS 漏洞无上游修复），替换为 `exceljs@^4.4.0`
+  - `fileParser.ts` — xlsx 解析改用 `ExcelJS.Workbook().xlsx.load()`，提取前 100 行
+  - `export.ts` — xlsx 导出改用 `ws.addRow()`；CSV 序列化独立实现（RFC 4180 转义 + UTF-8 BOM）
+  - `imports.ts` — xlsx 导入按行 + 单元格读取，首行作 header
+  - 已知限制：`.xls` 旧格式 exceljs 不支持（场景概率极低，接受）
+
+#### 测试基线
+- **覆盖率门槛（防倒退）** — `vitest.config.ts` 新增 thresholds 配置（实测值 -1% 缓冲）
+  - 后端：lines 9% / functions 13% / branches 8% / statements 9% + `reportOnFailure: true`
+  - 前端：lines 3% / functions 1% / branches 2% / statements 3%
+  - 策略说明：vitest `thresholds` 不支持 per-glob，全局高门槛会卡未测试模块，故采用"全局低门槛防倒退 + 局部高覆盖模块作参考"
+
+#### 性能基线
+- **autocannon 压测基线** — 因 k6 v0.57.0 二进制从 GitHub 下载受国内网络限制，改用 `autocannon` 作为等效替代
+  - 新增 `perf/autocannon-runner.mjs` — 3 个场景对齐 k6 脚本（login 50 并发 30s / workitems 100 并发 60s / ai-command 5 并发 30s）
+  - 新增 `perf/baseline-report.json` — 基线数据：workitems p97.5=556ms ✓达标 0 错误 / login p97.5=5603ms（瓶颈 bcrypt rounds=10 + DB 连接池 5）
+  - 字段映射：`p(95)` → `latency.p97_5`（autocannon 无原生 p95）/ `http_req_failed` → 手算 `(non2xx + errors) / total`
+
+#### 修复
+- **GlobalAIAssistant 配置模型跳转修复** — `window.open('/llm-settings', '_blank')` 被 Popup 拦截器静默拦截，改用 `useNavigate` SPA 跳转，同时修复"添加模型" `<a href>` 整页刷新问题
+- **dev 环境放宽 loginLimiter** — `max: 5 → 100000`（生产仍 5），避免 coverage 套件间触发 429
+
+### 生产建议（待落地）
+- 登录瓶颈：降 `BCRYPT_ROUNDS` 到 8 / 缓存 token / 提高 `connectionLimit` 20-50
+- 配置 LLM provider 后重跑 ai-command 压测
+- 将 `perf/autocannon-runner.mjs` 接入 CI 周度跑一次对比基线
+
 ## [V1.52] - 2026-07-25
 
 ### 通知闭环与团队协作

@@ -1,0 +1,81 @@
+{
+  "timestamp": "2026-07-25T08:10:53.848Z",
+  "baseUrl": "http://localhost:4000",
+  "tool": "autocannon (k6 替代方案，因 GitHub 下载受限)",
+  "environment": "dev (NODE_ENV=development, loginLimiter 临时放宽到 100000/min 跑压测)",
+  "scenarios": {
+    "login": {
+      "description": "POST /api/users/login - 50 并发 30s",
+      "duration": 30.3,
+      "connections": 50,
+      "totalRequests": 445,
+      "rps": 14.84,
+      "errors": 0,
+      "non2xx": 0,
+      "latency": {
+        "avg": 3135.79,
+        "p50": 2779,
+        "p90": 4917,
+        "p97_5": 5603,
+        "p99": 5685,
+        "max": 6628
+      },
+      "thresholds": {
+        "p95_lt_500ms": false,
+        "error_rate_lt_1pct": true
+      },
+      "notes": "平均 3.1s 来自 bcrypt(rounds=10) 密码验证 + DB 查询；prod 可考虑降低 rounds 或缓存 token"
+    },
+    "workitems": {
+      "description": "GET /api/work-items - 100 并发 60s",
+      "duration": 60.16,
+      "connections": 100,
+      "totalRequests": 13513,
+      "rps": 225.22,
+      "errors": 0,
+      "non2xx": 0,
+      "latency": {
+        "avg": 442.74,
+        "p50": 435,
+        "p90": 496,
+        "p97_5": 556,
+        "p99": 596,
+        "max": 743
+      },
+      "thresholds": {
+        "p95_lt_800ms": true,
+        "error_rate_lt_5pct": true
+      },
+      "notes": "全部达标，性能稳定"
+    },
+    "ai-command": {
+      "description": "POST /api/ai-command/command - 5 并发 30s (LLM 未配置)",
+      "duration": 30.01,
+      "connections": 5,
+      "totalRequests": 50038,
+      "rps": 1667.94,
+      "errors": 0,
+      "non2xx": 50038,
+      "latency": {
+        "avg": 2.41,
+        "p50": 2,
+        "p90": 3,
+        "p97_5": 4,
+        "p99": 4,
+        "max": 7
+      },
+      "thresholds": {
+        "error_rate_lt_10pct": false
+      },
+      "notes": "100% non-2xx 为预期：LLM 未配置时返回 400。配置 LLM provider 后才能测真实性能"
+    }
+  },
+  "summary": {
+    "passed_thresholds": "login 1/2, workitems 2/2, ai-command 0/1",
+    "key_findings": [
+      "工作项列表性能优秀：100 并发下 p97.5=556ms < 800ms 阈值，0 错误",
+      "登录瓶颈在 bcrypt：50 并发下平均 3.1s，p97.5=5.6s。生产建议降 rounds 或加 token 缓存",
+      "AI 命令需配置 LLM 才能压测真实性能，当前仅校验失败基线"
+    ]
+  }
+}

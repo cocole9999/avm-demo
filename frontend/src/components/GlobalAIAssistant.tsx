@@ -9,7 +9,7 @@
  * - 多模态输入：文件内容读取/图片base64、语音实时转写、模型跨厂商选择
  */
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { FloatButton, Drawer, Input, Button, Space, Tag, Spin, message as antdMessage, Avatar, Empty, Tooltip, Popconfirm, Badge, Select, Divider } from 'antd';
 import {
   RobotOutlined, SendOutlined, CloseOutlined, ThunderboltOutlined, ClearOutlined, HistoryOutlined,
@@ -233,6 +233,7 @@ export function GlobalAIAssistant() {
   const { user } = useAuth();
   const username = user?.displayName || user?.username || 'guest';
   const location = useLocation();
+  const navigate = useNavigate();
   // V1.50: 当前页面路径（注入到 LLM context，让 LLM 知道用户在哪个页面）
   const currentPath = location.pathname;
   const [open, setOpen] = useState(false);
@@ -915,7 +916,7 @@ export function GlobalAIAssistant() {
                         {menu}
                         <Divider style={{ margin: '4px 0' }} />
                         <a
-                          href="/llm-settings"
+                          onClick={(e) => { e.preventDefault(); setOpen(false); navigate('/llm-settings'); }}
                           onMouseDown={(e) => e.preventDefault()}
                           style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#1677ff', padding: '6px 12px', textDecoration: 'none', cursor: 'pointer' }}
                         >
@@ -926,7 +927,7 @@ export function GlobalAIAssistant() {
                     )}
                   />
                 ) : (
-                  <Button type="link" size="small" onClick={() => window.open('/llm-settings', '_blank')} style={{ fontSize: 12, padding: '0 4px' }}>
+                  <Button type="link" size="small" onClick={() => { setOpen(false); navigate('/llm-settings'); }} style={{ fontSize: 12, padding: '0 4px' }}>
                     <SettingOutlined /> 配置模型
                   </Button>
                 )}

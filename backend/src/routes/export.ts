@@ -7,7 +7,7 @@
  * 支持 format=xlsx | csv
  */
 import { Router } from 'express';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { recordAudit, actorFromReq } from '../utils/audit';
@@ -28,18 +28,42 @@ function parseBool(v: any): boolean | undefined {
   return v === 'true' || v === '1' || v === true;
 }
 
-function sendFile(res: any, filename: string, format: 'xlsx' | 'csv', rows: any[]) {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+/**
+ * 简易 CSV 序列化（不依赖 xlsx 库）
+ * - 字段含逗号/引号/换行时用双引号包裹，内部双引号转义为两个双引号
+ */
+function toCSV(rows: any[]): string {
+  if (rows.length === 0) return '';
+  const headers = Object.keys(rows[0]);
+  const escapeCell = (v: any) => {
+    const s = v == null ? '' : String(v);
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const lines = [headers.join(',')];
+  for (const row of rows) {
+    lines.push(headers.map(h => escapeCell(row[h])).join(','));
+  }
+  return lines.join('\r\n');
+}
 
+async function sendFile(res: any, filename: string, format: 'xlsx' | 'csv', rows: any[]) {
   if (format === 'xlsx') {
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Sheet1');
+    if (rows.length > 0) {
+      const headers = Object.keys(rows[0]);
+      ws.addRow(headers);
+      for (const row of rows) {
+        ws.addRow(headers.map(h => row[h] ?? ''));
+      }
+    }
+    const buf = await wb.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}.xlsx"`);
-    res.send(buf);
+    res.send(Buffer.from(buf));
   } else {
-    const csv = XLSX.utils.sheet_to_csv(ws);
+    const csv = toCSV(rows);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}.csv"`);
     // 加 BOM 让 Excel 识别 UTF-8
@@ -111,7 +135,7 @@ exportRouter.get('/work-items', validateQuery(exportWorkItemsSchema), async (req
 
     const filename = `work-items-${new Date().toISOString().slice(0, 10)}`;
     recordAudit('workItem', null, 'export', null, { summary: `导出工作项: ${rows.length} 条` }, actorFromReq(req));
-    sendFile(res, filename, format, rows);
+    await sendFile(res, filename, format, rows);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -156,7 +180,7 @@ exportRouter.get('/projects', validateQuery(exportSimpleSchema), async (req, res
     }));
 
     const filename = `projects-${new Date().toISOString().slice(0, 10)}`;
-    sendFile(res, filename, format, rows);
+    await sendFile(res, filename, format, rows);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -193,7 +217,7 @@ exportRouter.get('/customers', validateQuery(exportSimpleSchema), async (req, re
     }));
 
     const filename = `customers-${new Date().toISOString().slice(0, 10)}`;
-    sendFile(res, filename, format, rows);
+    await sendFile(res, filename, format, rows);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -227,7 +251,7 @@ exportRouter.get('/car-models', validateQuery(exportSimpleSchema), async (req, r
     }));
 
     const filename = `car-models-${new Date().toISOString().slice(0, 10)}`;
-    sendFile(res, filename, format, rows);
+    await sendFile(res, filename, format, rows);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -277,7 +301,7 @@ exportRouter.get('/risks', validateQuery(exportSimpleSchema), async (_req, res) 
     }).filter(r => r['风险点'] !== '无');
 
     const filename = `risks-${new Date().toISOString().slice(0, 10)}`;
-    sendFile(res, filename, format, rows);
+    await sendFile(res, filename, format, rows);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

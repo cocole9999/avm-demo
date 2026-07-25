@@ -16,7 +16,7 @@ import { processImport, RESOURCE_FIELDS, autoMap, generateTemplate, FIELD_ALIASE
 import { requireAuth, requireRole, autoRole } from '../middleware/auth';
 import { recordAudit, actorFromReq } from '../utils/audit';
 import multer from 'multer';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 export const importRouter = Router();
 
@@ -85,10 +85,25 @@ importRouter.post('/preview', upload.single('file'), async (req: any, res) => {
         const text = buf.toString('utf-8').replace(/^\uFEFF/, '');
         rows = parseCSV(text);
       } else {
-        // xlsx / xls 用 xlsx 库解析
-        const wb = XLSX.read(buf, { type: 'buffer' });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        // xlsx / xls 用 exceljs 库解析
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buf);
+        const sheet = wb.worksheets[0];
+        if (sheet) {
+          const headers: string[] = [];
+          sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
+            headers[col - 1] = cell.value == null ? '' : String(cell.value);
+          });
+          sheet.eachRow({ includeEmpty: false }, (row, rowNum) => {
+            if (rowNum === 1) return;
+            const obj: Record<string, any> = {};
+            row.eachCell({ includeEmpty: true }, (cell, col) => {
+              const key = headers[col - 1] || `col_${col}`;
+              obj[key] = cell.value ?? '';
+            });
+            rows.push(obj);
+          });
+        }
       }
     } else if (req.body?.csvText) {
       // JSON 模式 (前端 parse 后传)

@@ -19,7 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import mammoth from 'mammoth';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 // pdf-parse v2: CJS module, exports PDFParse class
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -170,16 +170,22 @@ export async function parseFile(filePath: string, filename: string): Promise<Par
         result.summary = result.content.slice(0, 200);
       } else if (ext === 'xlsx') {
         const buffer = await readFileAsBuffer(filePath);
-        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
+        const sheetNames = workbook.worksheets.slice(0, 5).map(ws => ws.name);
         const sheets: string[] = [];
-        for (const sheetName of workbook.SheetNames.slice(0, 5)) {
-          const sheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false });
-          sheets.push(`## ${sheetName}\n${json.slice(0, 100).map((row: any) => (Array.isArray(row) ? row.join('\t') : String(row))).join('\n')}`);
+        for (const worksheet of workbook.worksheets.slice(0, 5)) {
+          const rows: string[] = [];
+          worksheet.eachRow({ includeEmpty: false }, (row, rowNum) => {
+            if (rowNum > 100) return false;
+            const cells = (row.values as any[]).slice(1).map(v => (v == null ? '' : String(v)));
+            rows.push(cells.join('\t'));
+          });
+          sheets.push(`## ${worksheet.name}\n${rows.join('\n')}`);
         }
         result.content = sheets.join('\n\n');
-        result.metadata = { sheets: workbook.SheetNames.length, sheetNames: workbook.SheetNames.slice(0, 10) };
-        result.summary = `Excel 文件 (${workbook.SheetNames.length} 个工作表)`;
+        result.metadata = { sheets: workbook.worksheets.length, sheetNames };
+        result.summary = `Excel 文件 (${workbook.worksheets.length} 个工作表)`;
       } else if (ext === 'pptx') {
         // PPTX 解析需要额外库，暂时返回提示
         result.content = `[PPTX 文件: ${filename}，暂不支持文本提取，请手动查看]`;

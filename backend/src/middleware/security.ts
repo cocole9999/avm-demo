@@ -46,7 +46,8 @@ export const globalLimiter = rateLimit({
 /** 登录端点专门限流 (5 次/分钟, 防暴力破解) */
 export const loginLimiter = rateLimit({
   windowMs: 60 * 1000,  // 1 分钟
-  max: 5,
+  // 生产环境 5 次/分钟；dev 模式放宽到 100000 方便压测（高并发下 skipSuccessfulRequests 有竞态）
+  max: env.NODE_ENV === 'production' ? 5 : 100000,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,  // 成功登录不计入
