@@ -8,7 +8,7 @@ import { Card, List, Tag, Empty, Tabs, Button, Space, Spin, Badge, Avatar, Popco
 import {
   BellOutlined, CheckOutlined, ThunderboltOutlined, FireOutlined,
   UserAddOutlined, EditOutlined, MessageOutlined, SettingOutlined, DeleteOutlined,
-  ReloadOutlined, PlusOutlined,
+  ReloadOutlined, PlusOutlined, StarOutlined, StarFilled, EyeOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { notificationApi, aiApi, type Notification } from '../api';
@@ -26,6 +26,11 @@ const TYPE_META: Record<string, { label: string; color: string; icon: any }> = {
   review: { label: '评审', color: 'geekblue', icon: <CheckOutlined /> },
   comment: { label: '评论', color: 'magenta', icon: <MessageOutlined /> },
   system: { label: '系统', color: 'green', icon: <SettingOutlined /> },
+  // V1.52: 关注通知（notifyWatchers.ts 推送）
+  watch_status_change: { label: '关注·状态变更', color: 'gold', icon: <StarFilled /> },
+  watch_comment_added: { label: '关注·新评论', color: 'volcano', icon: <StarFilled /> },
+  // V1.50: 关注者字段变更
+  workItem_watched_update: { label: '关注更新', color: 'lime', icon: <EyeOutlined /> },
 };
 
 const LEVEL_COLOR: Record<string, string> = {

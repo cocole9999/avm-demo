@@ -17,6 +17,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { resourceApi } from '../api';
 import { useAuth } from '../AuthContext';
 import type { ResourceAllocation, ResourceLoadUser } from '../types';
+import { notifyApiError } from '../utils/apiError';
 
 const { RangePicker } = DatePicker;
 
@@ -64,8 +65,8 @@ export function ResourcesPage() {
       ]);
       setLoadData(ld);
       setAllocations(all);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }

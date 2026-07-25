@@ -5,6 +5,8 @@ import { ArrowLeftOutlined, PlusOutlined, EditOutlined, ReloadOutlined } from '@
 import { dashboardApi, chartApi } from '../api';
 import type { Dashboard, ChartConfig } from '../types';
 import { EChart, buildEChartsOption } from '../components/EChart';
+import { AppBreadcrumb } from '../components/AppBreadcrumb';
+import { notifyApiError } from '../utils/apiError';
 
 export function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,8 +31,8 @@ export function DashboardDetailPage() {
         }
       }));
       setChartData(data);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
@@ -42,6 +44,14 @@ export function DashboardDetailPage() {
 
   return (
     <div>
+      {/* V1.48: 面包屑导航（工作台 / 仪表盘 / 名称） */}
+      <AppBreadcrumb
+        items={[
+          { label: '工作台', path: '/workbench' },
+          { label: '仪表盘', path: '/dashboards' },
+        ]}
+        extra={[{ label: dashboard.name }]}
+      />
       <Card style={{ marginBottom: 12 }} styles={{ body: { padding: 12 } }}>
         <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/dashboards')}>返回</Button>

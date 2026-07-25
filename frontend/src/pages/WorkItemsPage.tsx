@@ -1,56 +1,63 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Segmented, Button, Input, Select, Space, Tag, Modal, Form, DatePicker,
-  Dropdown, message, Tooltip, Empty, Avatar,
+  Dropdown, message, Tooltip, Empty, Avatar, Popconfirm,
 } from 'antd';
 import {
   PlusOutlined, ReloadOutlined, FilterOutlined, TableOutlined, DownloadOutlined,
   AppstoreOutlined, BarChartOutlined, MoreOutlined, DeleteOutlined,
-  RobotOutlined,
+  RobotOutlined, HolderOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { workItemApi, metaApi, aiApi } from '../api';
 import { downloadBlob, getFilenameFromResponse } from '../utils/download';
+import { notifyApiError } from '../utils/apiError';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { useUrlState } from '../hooks/useUrlState';
+import { useSavedFilters } from '../hooks/useSavedFilters';
 import type { WorkItem, WorkItemType, MetaOptions } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { TableView } from '../views/TableView';
 import { KanbanView } from '../views/KanbanView';
 import { GanttView } from '../views/GanttView';
+import { SortableListView } from '../views/SortableListView';
 import { useWorkItemChanged } from '../services/useWorkItemChanged';
+import { DuplicateBugAlert } from '../components/DuplicateBugAlert';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 
 export function WorkItemsPage() {
   const { type = 'requirement' } = useParams<{ type: WorkItemType }>();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [items, setItems] = useState<WorkItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [options, setOptions] = useState<MetaOptions | null>(null);
-  const [view, setView] = useState<'table' | 'kanban' | 'gantt'>('table');
 
-  // 从 URL query 读 view
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const v = params.get('view');
-    if (v === 'kanban' || v === 'gantt' || v === 'table') setView(v);
-  }, [location.search]);
-
-  // 切换 view 时同步到 URL
-  const handleViewChange = (v: any) => {
-    setView(v);
-    const params = new URLSearchParams(location.search);
-    params.set('view', v);
-    navigate({ search: params.toString() }, { replace: true });
-  };
-
-  // 筛选条件
-  const [filterStatus, setFilterStatus] = useState<string | undefined>();
-  const [filterPriority, setFilterPriority] = useState<string | undefined>();
-  const [filterAssignee, setFilterAssignee] = useState<string | undefined>();
-  const [filterIteration, setFilterIteration] = useState<string | undefined>();
+  // V1.48: 筛选/视图/搜索状态同步到 URL（刷新不丢失，可分享链接）
+  const [view, setView] = useUrlState<'table' | 'kanban' | 'gantt' | 'sortable'>('view', 'table');
+  const [filterStatus, setFilterStatus] = useUrlState<string>('status', '');
+  const [filterPriority, setFilterPriority] = useUrlState<string>('priority', '');
+  const [filterAssignee, setFilterAssignee] = useUrlState<string>('assignee', '');
+  const [filterIteration, setFilterIteration] = useUrlState<string>('iteration', '');
+  const [searchText, setSearchText] = useState('');  // 搜索框立即响应输入，但请求用防抖值
+  const debouncedSearch = useDebouncedValue(searchText, 300);
   const [exporting, setExporting] = useState(false);
+
+  // V1.50: 保存筛选条件（localStorage 持久化）
+  const currentFilters = useMemo(() => ({
+    status: filterStatus,
+    priority: filterPriority,
+    assignee: filterAssignee,
+    iteration: filterIteration,
+    search: debouncedSearch,
+    view,
+  }), [filterStatus, filterPriority, filterAssignee, filterIteration, debouncedSearch, view]);
+  const { savedFilters, saveFilter, deleteFilter, applyFilter, shareFilter, cloudError } = useSavedFilters(`work-items-${type}`, currentFilters, { cloudSync: true });
+  const [saveFilterOpen, setSaveFilterOpen] = useState(false);
+  const [saveFilterName, setSaveFilterName] = useState('');
+  const [saveFilterShared, setSaveFilterShared] = useState(false);
 
   const handleExport = async (format: 'xlsx' | 'csv') => {
     setExporting(true);
@@ -63,13 +70,12 @@ export function WorkItemsPage() {
       const blob = await aiApi.exportWorkItems(params);
       const filename = getFilenameFromResponse((blob as any)?.headers, `work-items-${type || 'all'}-${new Date().toISOString().slice(0,10)}.${format}`);
       downloadBlob(blob as Blob, filename);
-    } catch (e: any) {
-      message.error('导出失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '导出失败：');
     } finally {
       setExporting(false);
     }
   };
-  const [searchText, setSearchText] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,15 +85,15 @@ export function WorkItemsPage() {
       if (filterPriority) params.priority = filterPriority;
       if (filterAssignee) params.assignee = filterAssignee;
       if (filterIteration) params.iterationId = filterIteration;
-      if (searchText) params.q = searchText;
+      if (debouncedSearch) params.q = debouncedSearch;
       const data = await workItemApi.list(params);
       setItems(data);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
-  }, [type, filterStatus, filterPriority, filterAssignee, filterIteration, searchText]);
+  }, [type, filterStatus, filterPriority, filterAssignee, filterIteration, debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { metaApi.options().then(setOptions); }, []);
@@ -96,8 +102,8 @@ export function WorkItemsPage() {
 
   // 当 type 变化时清掉不适用筛选
   useEffect(() => {
-    setFilterStatus(undefined);
-  }, [type]);
+    setFilterStatus('');
+  }, [type, setFilterStatus]);
 
   const statusList = options?.statusByType[type as WorkItemType]?.values || [];
 
@@ -107,6 +113,49 @@ export function WorkItemsPage() {
   const [aiFilling, setAiFilling] = useState(false);
   const [aiSuggesting, setAiSuggesting] = useState(false);
   const [creating, setCreating] = useState(false);
+  // V1.50: 监听新建表单字段用于 Bug 重复检测
+  const newTitle = Form.useWatch('title', form);
+  const newDescription = Form.useWatch('description', form);
+  const isBugCreate = createOpen && type === 'bug';
+  // V1.50: AI 一键归类
+  const [autoClassifying, setAutoClassifying] = useState(false);
+
+  const handleAutoClassify = async () => {
+    try {
+      const v = await form.validateFields(['title']);
+      if (!v.title) { message.warning('请先输入标题'); return; }
+      setAutoClassifying(true);
+      const r = await aiApi.autoClassify({
+        title: v.title,
+        type: type as string,
+        priority: v.priority,
+        hint: v.description,
+      });
+      if (r.filled) {
+        const f = r.filled;
+        form.setFieldsValue({
+          type: f.type || type,
+          priority: f.priority || 'P2',
+          description: f.description || v.description || '',
+          estimate: f.estimate || undefined,
+          assignee: f.assignee || undefined,
+          module: f.module || undefined,
+        });
+        const filled: string[] = [];
+        if (f.type) filled.push('类型');
+        if (f.priority) filled.push('优先级');
+        if (f.description) filled.push('描述');
+        if (f.estimate) filled.push('估分');
+        if (f.assignee) filled.push('负责人');
+        if (f.module) filled.push('模块');
+        message.success(`AI 一键归类完成: ${filled.join('、')}`);
+      }
+    } catch (e) {
+      notifyApiError(e, 'AI 一键归类失败：');
+    } finally {
+      setAutoClassifying(false);
+    }
+  };
 
   const handleAiFill = async () => {
     try {
@@ -128,9 +177,8 @@ export function WorkItemsPage() {
         });
         message.success(r.reasoning || 'AI 已补全字段');
       }
-    } catch (e: any) {
-      if (e.errorFields) return; // 表单校验失败
-      message.error('AI 填充失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 填充失败：');
     } finally {
       setAiFilling(false);
     }
@@ -148,9 +196,8 @@ export function WorkItemsPage() {
         form.setFieldValue('assignee', r.assignee);
         message.success(`AI 推荐: ${r.assignee} — ${r.reasoning || ''}`);
       }
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('AI 推荐失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 推荐失败：');
     } finally {
       setAiSuggesting(false);
     }
@@ -177,9 +224,8 @@ export function WorkItemsPage() {
       load();
       // 通知其他页面
       window.dispatchEvent(new CustomEvent('avm-data-changed'));
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('创建失败：' + (e.message || ''));
+    } catch (e) {
+      notifyApiError(e, '创建失败：');
     }
   };
 
@@ -201,8 +247,8 @@ export function WorkItemsPage() {
       await workItemApi.update(id, { status });
       message.success(`已流转到 ${status}`);
       load();
-    } catch (e: any) {
-      message.error('流转失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '流转失败：');
     }
   };
 
@@ -223,11 +269,12 @@ export function WorkItemsPage() {
         <Space wrap>
           <Segmented
             value={view}
-            onChange={handleViewChange}
+            onChange={(v) => setView(v as 'table' | 'kanban' | 'gantt' | 'sortable')}
             options={[
               { value: 'table', label: <span><TableOutlined /> 表格</span> },
               { value: 'kanban', label: <span><AppstoreOutlined /> 看板</span> },
               { value: 'gantt', label: <span><BarChartOutlined /> 甘特</span> },
+              { value: 'sortable', label: <span><HolderOutlined /> 拖拽</span> },
             ]}
           />
           <Input.Search
@@ -262,6 +309,23 @@ export function WorkItemsPage() {
             options={[...new Set(items.map(i => i.assignee).filter(Boolean))].map(a => ({ value: a, label: a }))}
           />
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+          {/* V1.50: 保存当前筛选 + V1.52: 团队共享（已抽到 SavedFilterButton 组件） */}
+          <SavedFilterButton
+            currentFilters={currentFilters}
+            applyFilters={(f) => {
+              setFilterStatus(f.status || '');
+              setFilterPriority(f.priority || '');
+              setFilterAssignee(f.assignee || '');
+              setFilterIteration(f.iteration || '');
+              setSearchText(f.search || '');
+              if (f.view) setView(f.view as any);
+            }}
+            savedFilters={savedFilters}
+            onSave={(name, shared) => saveFilter(name, shared)}
+            onDelete={(id) => deleteFilter(id)}
+            onShare={(id, shared) => shareFilter(id, shared)}
+            cloudError={cloudError}
+          />
           <Dropdown
             menu={{
               items: [
@@ -278,13 +342,15 @@ export function WorkItemsPage() {
         </Space>
       </Card>
 
-      <Card styles={{ body: { padding: view === 'kanban' ? 12 : 0 } }}>
+      <Card styles={{ body: { padding: view === 'kanban' || view === 'sortable' ? 12 : 0 } }}>
         {items.length === 0 && !loading ? (
           <Empty description="暂无数据，点击右上角创建第一条记录" />
         ) : view === 'table' ? (
           <TableView items={items} loading={loading} onStatusChange={handleStatusChange} onDelete={handleDelete} onRefresh={load} onOpenItem={(it) => navigate(`/work-items/${it.type}/${it.id}`)} />
         ) : view === 'kanban' ? (
           <KanbanView items={items} statusList={statusList} onStatusChange={handleStatusChange} onClickItem={(it) => navigate(`/work-items/${it.type}/${it.id}`)} />
+        ) : view === 'sortable' ? (
+          <SortableListView items={items} type={type} onItemClick={(it) => navigate(`/work-items/${it.type}/${it.id}`)} onStatusChange={handleStatusChange} />
         ) : (
           <GanttView items={items} onClickItem={(it) => navigate(`/work-items/${it.type}/${it.id}`)} />
         )}
@@ -301,6 +367,10 @@ export function WorkItemsPage() {
           <Button key="ai" icon={<ThunderboltOutlined />} onClick={handleAiFill} loading={aiFilling}>
             AI 帮我填
           </Button>,
+          // V1.50: AI 一键归类（合并填表+推荐负责人）
+          <Button key="auto" type="primary" ghost icon={<RobotOutlined />} onClick={handleAutoClassify} loading={autoClassifying}>
+            AI 一键归类
+          </Button>,
           <Button key="cancel" onClick={() => setCreateOpen(false)}>取消</Button>,
           <Button key="ok" type="primary" loading={creating} onClick={handleCreate}>创建</Button>,
         ]}
@@ -309,6 +379,12 @@ export function WorkItemsPage() {
           <Form.Item label="标题" name="title" rules={[{ required: true, message: '请输入标题' }]}>
             <Input placeholder="一句话描述清楚这个工作项" />
           </Form.Item>
+          {/* V1.50: Bug 类型时显示 AI 重复检测（输入标题后自动检测 90 天内相似 Bug） */}
+          <DuplicateBugAlert
+            title={newTitle || ''}
+            description={newDescription}
+            enabled={isBugCreate}
+          />
           <Form.Item label="详细描述" name="description">
             <Input.TextArea rows={4} placeholder="补充背景、验收标准等" />
           </Form.Item>

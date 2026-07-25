@@ -3,17 +3,35 @@
  *
  * - helmet: 设置安全 HTTP 头 (X-Frame-Options, CSP, HSTS 等)
  * - express-rate-limit: 全局限流 + 登录端点专门限流 (防暴力破解)
+ *
+ * V1.46: 生产环境启用严格 CSP + 收紧 CORP；开发模式保持宽松
  */
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { env } from '../env';
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
 /** 全局 helmet 配置 */
 export const helmetMiddleware = helmet({
-  contentSecurityPolicy: false,  // CSP 复杂, 由前端 meta 控制
+  // V1.46: 生产启用严格 CSP，开发模式关闭（Vite 需 unsafe-eval/inline）
+  contentSecurityPolicy: IS_PRODUCTION ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],  // antd/emotion 运行时注入样式
+      imgSrc: ["'self'", 'data:', 'blob:'],      // 头像/截图/图表导出
+      fontSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'", 'ws:', 'wss:'],     // WebSocket + API
+      frameAncestors: ["'none'"],                 // 防 clickjacking
+      objectSrc: ["'none'"],                      // 禁 Flash/Java
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  } : false,
   crossOriginEmbedderPolicy: false,
-  // 允许同源/同子网 (开发模式) + 飞书/钉钉 webhook
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  // V1.46: 生产收紧为 same-origin（无跨域资源需求时更安全）
+  crossOriginResourcePolicy: { policy: IS_PRODUCTION ? 'same-origin' : 'cross-origin' },
 });
 
 /** 全局 API 限流 (宽松, 防滥用) */

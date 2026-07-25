@@ -53,6 +53,14 @@ describe('评审管理路由', () => {
         reviewType: 'code_review',
         title: `测试评审-${Date.now()}`,
         initiator: '测试用户',
+        items: [
+          { name: '代码规范', itemType: 'check', description: '是否符合编码规范', maxScore: 5 },
+          { name: '逻辑正确性', itemType: 'text', description: '核心逻辑是否正确' },
+        ],
+        participants: [
+          { userId: 'test-user-1', userName: '张三', role: 'reviewer', weight: 1 },
+          { userId: 'test-user-2', userName: '李四', role: 'approver', weight: 2 },
+        ],
       }),
     });
     expect(r.status).toBe(201);

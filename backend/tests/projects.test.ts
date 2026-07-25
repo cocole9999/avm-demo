@@ -6,6 +6,8 @@ import { describe, it, expect, beforeAll } from 'vitest';
 
 const BASE = process.env.TEST_BASE_URL || 'http://localhost:4000';
 let serverUp = false;
+let testCustomerId: string;
+let testCarModelId: string;
 
 beforeAll(async () => {
   try {
@@ -16,7 +18,23 @@ beforeAll(async () => {
   }
   if (!serverUp) {
     console.warn(`\n⚠️  后端未在 ${BASE} 运行, projects 测试跳过\n`);
+    return;
   }
+  // 准备外键依赖: Customer + CarModel (Project schema 必填)
+  const ts = Date.now();
+  const custRes = await fetch(`${BASE}/api/customers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: `TEST-CUST-${ts}`, name: `测试客户-${ts}` }),
+  });
+  if (custRes.status === 201) testCustomerId = (await custRes.json()).id;
+
+  const carRes = await fetch(`${BASE}/api/car-models`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: `TEST-CAR-${ts}`, name: `测试车型-${ts}`, brand: '测试品牌' }),
+  });
+  if (carRes.status === 201) testCarModelId = (await carRes.json()).id;
 });
 
 describe('项目管理路由', () => {
@@ -46,6 +64,10 @@ describe('项目管理路由', () => {
         name: '测试项目',
         status: 'planning',
         billingType: 'ODC',
+        customerId: testCustomerId,
+        carModelId: testCarModelId,
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 30 * 86400000).toISOString(),
       }),
     });
     expect(r.status).toBe(201);
@@ -61,9 +83,13 @@ describe('项目管理路由', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        code: `TEST-${Date.now()}`,
+        code: `TEST-${Date.now()}-U`,
         name: '待更新项目',
         status: 'planning',
+        customerId: testCustomerId,
+        carModelId: testCarModelId,
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 30 * 86400000).toISOString(),
       }),
     });
     const created = await createRes.json();
@@ -86,9 +112,13 @@ describe('项目管理路由', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        code: `TEST-${Date.now()}`,
+        code: `TEST-${Date.now()}-D`,
         name: '待删除项目',
         status: 'planning',
+        customerId: testCustomerId,
+        carModelId: testCarModelId,
+        startDate: new Date().toISOString(),
+        endDate: new Date(Date.now() + 30 * 86400000).toISOString(),
       }),
     });
     const created = await createRes.json();

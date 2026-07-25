@@ -14,14 +14,28 @@
  * 这层只做协议适配（HTTP/SSE/stdio）
  */
 import { Router } from 'express';
-import { MCP_TOOLS, executeTool, listResources, readResource, PROMPT_TEMPLATES, handleJsonRpcRequest, SERVER_INFO } from '../services/mcpCore';
+import { MCP_TOOLS, executeTool, listResources, readResource, PROMPT_TEMPLATES, handleJsonRpcRequest, SERVER_INFO, type McpUserContext } from '../services/mcpCore';
 
 export const mcpRouter = Router();
+
+/** 从 Express req 提取 MCP 用户上下文（V1.47 新增） */
+function extractCtx(req: any): McpUserContext | undefined {
+  const user = req?.user;
+  if (!user) return undefined;
+  return {
+    userId: user.id,
+    tenantId: user.tenantId,
+    role: user.role,
+    username: user.username || user.displayName,
+    spaceId: user.spaceId,
+    stdio: false,
+  };
+}
 
 mcpRouter.get('/', (_req, res) => {
   res.json({
     name: 'avm-mcp-server',
-    version: '1.0.0',
+    version: SERVER_INFO.version,
     description: 'AVM 项目中心 MCP Server - 让外部 AI 工具（Claude/Cursor/Trae/aily）调用 AVM 数据',
     protocol: 'mcp-1.0',
     capabilities: { tools: true, resources: true, promptTemplates: true },
@@ -38,7 +52,7 @@ mcpRouter.get('/', (_req, res) => {
       readResource: 'GET /api/mcp/resources/:uri',
       promptTemplates: 'GET /api/mcp/prompt-templates',
       // stdio 模式（最稳）
-      stdio: '用 npx tsx src/bin/mcp-stdio.ts 启动 stdio 模式',
+      stdio: '用 npx tsx src/bin/mcp-stdio.ts 启动 stdio 模式（支持 AVM_MCP_TOKEN 环境变量认证）',
     },
   });
 });
@@ -62,7 +76,8 @@ mcpRouter.post('/stream', async (req, res) => {
       return res.end();
     }
 
-    const resp = await handleJsonRpcRequest(req_);
+    const ctx = extractCtx(req);
+    const resp = await handleJsonRpcRequest(req_, ctx);
     if (resp) {
       // SSE 格式：event: message\ndata: <json>\n\n
       res.write(`event: message\ndata: ${JSON.stringify(resp)}\n\n`);
@@ -135,7 +150,8 @@ mcpRouter.post('/messages', async (req, res) => {
   res.status(202).json({ accepted: true });
 
   try {
-    const resp = await handleJsonRpcRequest(req_);
+    const ctx = extractCtx(req);
+    const resp = await handleJsonRpcRequest(req_, ctx);
     if (resp) {
       session.res.write(`event: message\ndata: ${JSON.stringify(resp)}\n\n`);
     }
@@ -157,7 +173,8 @@ mcpRouter.post('/tools/:name', async (req, res) => {
     const tool = MCP_TOOLS.find(t => t.name === name);
     if (!tool) return res.status(404).json({ error: `Tool not found: ${name}` });
     const args = req.body || {};
-    const result = await executeTool(name, args);
+    const ctx = extractCtx(req);
+    const result = await executeTool(name, args, ctx);
     res.json({ tool: name, args, result });
   } catch (e: any) {
     res.status(400).json({ error: e.message, tool: req.params.name });

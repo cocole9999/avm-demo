@@ -10,7 +10,8 @@ import crypto from 'crypto';
 import { prisma } from '../db';
 import { env } from '../env';
 import { encrypt, decrypt } from '../utils/crypto';
-import { requireRole } from '../middleware/auth';
+import { requireRole, type AuthedRequest } from '../middleware/auth';
+import type { Request, Response } from 'express';
 import { recordAudit, actorFromReq } from '../utils/audit';
 import { hashPassword } from '../utils/password';
 import { validateBody, tenantCreateSchema, tenantUpdateSchema, ssoSettingsSchema, ssoDemoLoginSchema, ssoBindSchema } from '../utils/validation';
@@ -154,7 +155,8 @@ ssoRouter.get('/oauth/:provider/login', async (req, res) => {
 });
 
 // 通用：模拟 SSO 登录（仅开发/演示环境可用，生产环境禁用）
-ssoRouter.post('/oauth/:provider/demo-login', validateBody(ssoDemoLoginSchema), async (req, res) => {
+// P0-1 安全修复：① 生产环境禁用；② 必须有 tenant_admin 权限才能调用，防止任意用户被冒充登录
+ssoRouter.post('/oauth/:provider/demo-login', requireRole('tenant_admin'), validateBody(ssoDemoLoginSchema), async (req, res) => {
   // P0-1: 生产环境禁用 demo-login，防止认证后门
   if (IS_PRODUCTION) {
     return res.status(404).json({ error: '该端点在生产环境不可用，请使用真实 SSO OAuth 流程' });
@@ -268,23 +270,39 @@ ssoRouter.get('/oauth/feishu/callback', async (req, res) => {
 });
 
 // ========== 用户解绑 / 绑定 SSO ==========
-ssoRouter.post('/users/:id/bind-sso', validateBody(ssoBindSchema), async (req, res) => {
+// P0-2 安全修复：IDOR 越权防护
+//   ① 本人可绑定/解绑自己的 SSO（req.user.id === params.id）
+//   ② tenant_admin 可代为操作任意用户（用于管理员重置场景）
+//   ③ 不满足上述任一条件返回 403
+ssoRouter.post('/users/:id/bind-sso', validateBody(ssoBindSchema), async (req: AuthedRequest, res) => {
   try {
+    const targetId = req.params.id;
+    const currentId = req.user?.id;
+    const currentRole = req.user?.role;
+    if (currentId !== targetId && currentRole !== 'tenant_admin') {
+      return res.status(403).json({ error: '权限不足：只能绑定自己的 SSO，或需租户管理员权限' });
+    }
     const { provider, openId } = req.body;
     const data: any = { ssoBound: true };
     if (provider === 'feishu') data.feishuOpenId = openId;
     else if (provider === 'dingtalk') data.dingtalkId = openId;
     else if (provider === 'wechatwork') data.wechatworkId = openId;
-    const u = await prisma.user.update({ where: { id: req.params.id }, data });
+    const u = await prisma.user.update({ where: { id: targetId }, data });
     res.json(u);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
 });
 
-ssoRouter.post('/users/:id/unbind-sso', async (req, res) => {
+ssoRouter.post('/users/:id/unbind-sso', async (req: AuthedRequest, res) => {
+  const targetId = req.params.id;
+  const currentId = req.user?.id;
+  const currentRole = req.user?.role;
+  if (currentId !== targetId && currentRole !== 'tenant_admin') {
+    return res.status(403).json({ error: '权限不足：只能解绑自己的 SSO，或需租户管理员权限' });
+  }
   const u = await prisma.user.update({
-    where: { id: req.params.id },
+    where: { id: targetId },
     data: { ssoBound: false, feishuOpenId: null, dingtalkId: null, wechatworkId: null },
   });
   res.json(u);

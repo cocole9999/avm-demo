@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Card, Table, Button, Space, Modal, Form, Input, Select, Switch, message, Tag, Popconfirm, Tabs, Drawer, Empty } from 'antd';
 import { PlusOutlined, ThunderboltOutlined, ReloadOutlined, DeleteOutlined, EditOutlined, PlayCircleOutlined, EyeOutlined, ApiOutlined } from '@ant-design/icons';
 import { automationApi, type AutomationRule } from '../api';
+import { notifyApiError } from '../utils/apiError';
 
 export function AutomationPage() {
   const [rules, setRules] = useState<any[]>([]);
@@ -90,7 +91,7 @@ export function AutomationPage() {
                           const res = await automationApi.run(r.id, { type: 'work_item.created', workItemId: 'demo', status: '待评审', priority: 'P0' });
                           message.success(`已触发：${res.matched ? '条件匹配' : '条件未匹配'}，执行 ${res.actionsExecuted.length} 操作`);
                           load();
-                        } catch (e) { message.error('触发失败'); }
+                        } catch (e) { notifyApiError(e, '触发失败：'); }
                       }}>运行</Button>
                       <Button type="link" size="small" icon={<EyeOutlined />} onClick={async () => {
                         setTestingRuleId(r.id);

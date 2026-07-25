@@ -1,17 +1,19 @@
-import { useEffect, useState } from 'react';
-import { Layout, Menu, theme, Badge, Avatar, Tag, AutoComplete, Dropdown, Space, List, Empty, Button, message, notification as antdNotification, Tooltip, Modal } from 'antd';
+import { useEffect, useRef, useState } from 'react';
+import { Layout, Menu, theme, Badge, Avatar, Tag, AutoComplete, Dropdown, Space, List, Empty, Button, message, notification as antdNotification, Tooltip, Modal, Input, Spin } from 'antd';
 import {
-  AppstoreOutlined, TableOutlined, ProjectOutlined, BarChartOutlined,
-  SettingOutlined, BellOutlined, UserOutlined, TeamOutlined, RocketOutlined,
-  PartitionOutlined, AuditOutlined, FundProjectionScreenOutlined, RobotOutlined,
+  AppstoreOutlined, ProjectOutlined, BarChartOutlined,
+  BellOutlined, UserOutlined, TeamOutlined, RocketOutlined,
+  PartitionOutlined, AuditOutlined, FundProjectionScreenOutlined,
   AppstoreAddOutlined, ScheduleOutlined, StarOutlined, StarFilled,
-  ApartmentOutlined, FunctionOutlined, ThunderboltOutlined, CalculatorOutlined, ApiOutlined, FileExcelOutlined, FileTextOutlined, SwapOutlined, ToolOutlined, ProfileOutlined, LineChartOutlined, CameraOutlined, BulbOutlined, ExperimentOutlined, HeartOutlined, BankOutlined, CarOutlined, ShopOutlined, ProjectOutlined as ProjectIcon, ImportOutlined,
-  CheckOutlined, FireOutlined, LogoutOutlined, CalendarOutlined, SmileOutlined, WifiOutlined, DisconnectOutlined,
+  ApartmentOutlined, FunctionOutlined, ThunderboltOutlined, ApiOutlined, FileTextOutlined, ToolOutlined, LineChartOutlined, CameraOutlined, ExperimentOutlined, BankOutlined, CarOutlined, ShopOutlined, ProjectOutlined as ProjectIcon, ImportOutlined,
+  CheckOutlined, LogoutOutlined, CalendarOutlined, WifiOutlined, DisconnectOutlined,
+  BulbOutlined, BulbFilled, RobotOutlined, ArrowRightOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { iterationApi, metaApi, notificationApi, searchApi, favoriteApi, spaceApi, type SpaceType, type Favorite } from './api';
+import { iterationApi, metaApi, notificationApi, searchApi, favoriteApi, spaceApi, aiApi, type SpaceType, type Favorite } from './api';
 import type { Iteration } from './types';
 import { useAuth } from './AuthContext';
+import { useThemeMode } from './ThemeContext';
 import { GlobalAIAssistant } from './components/GlobalAIAssistant';
 import { wsClient } from './services/ws';
 
@@ -28,10 +30,20 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  // V1.50: NL 搜索（自然语言 → 筛选条件 + 跳转）
+  const [nlMode, setNlMode] = useState(false);
+  const [nlLoading, setNlLoading] = useState(false);
+  const [nlResult, setNlResult] = useState<{
+    target: string; filters: Record<string, any>; humanReadable: string;
+    url: string; source: string; confidence?: number;
+  } | null>(null);
   const [favorites, setFavorites] = useState<Favorite[]>([]);
+  // V1.52: 通知下拉面板预览（前 5 条最新未读，WS 收到时插入头部）
+  const [notifPreview, setNotifPreview] = useState<any[]>([]);
   const location = useLocation();
   const navigate = useNavigate();
   const { token: themeToken } = theme.useToken();
+  const { isDark, toggle: toggleTheme } = useThemeMode();
 
   useEffect(() => {
     iterationApi.list().then(setIterations).catch(() => {});
@@ -62,8 +74,11 @@ export default function App() {
       if (!n) return;
       // 增加未读计数
       setUnreadCount(c => c + 1);
+      // V1.52: 插入下拉面板预览（最多 5 条）
+      setNotifPreview(prev => [n, ...prev].slice(0, 5));
       // 顶部 toast
-      const kindIcon = n.kind === 'mention' ? '💬' : n.kind === 'handover' ? '🔄' : n.kind === 'dep_overdue' ? '📦' : n.kind === 'risk_alert' ? '🚨' : '🔔';
+      const kindIcon = n.kind === 'mention' ? '💬' : n.kind === 'handover' ? '🔄' : n.kind === 'dep_overdue' ? '📦' : n.kind === 'risk_alert' ? '🚨'
+        : n.kind === 'watch_status_change' ? '⭐' : n.kind === 'watch_comment_added' ? '⭐' : '🔔';
       antdNotification.open({
         message: `${kindIcon} ${n.title || '新通知'}`,
         description: (n.content || '').slice(0, 120),
@@ -85,8 +100,9 @@ export default function App() {
     if (!authToken) wsClient.disconnect();
   }, [authToken]);
 
-  // V1.28 全局键盘快捷键
+  // V1.28 全局键盘快捷键（V1.48: 用 useRef 替代 (window as any).__avm_lastG）
   const [helpOpen, setHelpOpen] = useState(false);
+  const lastGRef = useRef<number>(0);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // 排除输入框/可编辑元素
@@ -115,42 +131,42 @@ export default function App() {
           break;
         case 'g':
           // 'g' 后面跟另一个键形成组合 (j/k/gg/d/w/i/n)
-          // 简单实现: 记录 lastG, 800ms 内接受
-          const lastG = (window as any).__avm_lastG || 0;
+          // V1.48: 用 useRef 替代 window 全局，避免污染 window 对象和绕过类型系统
+          const lastG = lastGRef.current;
           if (Date.now() - lastG < 800) {
-            (window as any).__avm_lastG = 0;
+            lastGRef.current = 0;
           } else {
-            (window as any).__avm_lastG = Date.now();
+            lastGRef.current = Date.now();
             return;
           }
           break;
         case 'd':
-          if ((window as any).__avm_lastG && Date.now() - (window as any).__avm_lastG < 800) {
-            (window as any).__avm_lastG = 0;
+          if (lastGRef.current && Date.now() - lastGRef.current < 800) {
+            lastGRef.current = 0;
             navigate('/dashboard');
           }
           break;
         case 'w':
-          if ((window as any).__avm_lastG && Date.now() - (window as any).__avm_lastG < 800) {
-            (window as any).__avm_lastG = 0;
+          if (lastGRef.current && Date.now() - lastGRef.current < 800) {
+            lastGRef.current = 0;
             navigate('/workbench');
           }
           break;
         case 'i':
-          if ((window as any).__avm_lastG && Date.now() - (window as any).__avm_lastG < 800) {
-            (window as any).__avm_lastG = 0;
+          if (lastGRef.current && Date.now() - lastGRef.current < 800) {
+            lastGRef.current = 0;
             navigate('/imports');
           }
           break;
         case 'r':
-          if ((window as any).__avm_lastG && Date.now() - (window as any).__avm_lastG < 800) {
-            (window as any).__avm_lastG = 0;
+          if (lastGRef.current && Date.now() - lastGRef.current < 800) {
+            lastGRef.current = 0;
             navigate('/reports');
           }
           break;
         case 'a':
-          if ((window as any).__avm_lastG && Date.now() - (window as any).__avm_lastG < 800) {
-            (window as any).__avm_lastG = 0;
+          if (lastGRef.current && Date.now() - lastGRef.current < 800) {
+            lastGRef.current = 0;
             navigate('/audit-logs');
           }
           break;
@@ -226,7 +242,6 @@ export default function App() {
       case 'car-models': return '车型库';
       case 'projects': return '项目管理';
       case 'dependencies': return '外部依赖';
-      case 'resources': return '资源管理';
       case 'gantt': return '甘特图';
       case 'users': return '用户管理';
       case 'audit-logs': return '审计日志';
@@ -234,6 +249,53 @@ export default function App() {
       case 'reports': return '周报月报';
       default: return '';
     }
+  };
+
+  // V1.50: NL 搜索 handler
+  const handleNlSearch = async (q?: string) => {
+    const query = (q ?? searchQ).trim();
+    if (!query) {
+      setNlResult(null);
+      return;
+    }
+    setNlLoading(true);
+    try {
+      const r = await aiApi.nlSearch(query);
+      setNlResult({
+        target: r.target,
+        filters: r.filters,
+        humanReadable: r.humanReadable,
+        url: r.url,
+        source: r.source,
+        confidence: r.confidence,
+      });
+    } catch (e: any) {
+      message.error('NL 搜索失败: ' + (e?.message || '未知错误'));
+    } finally {
+      setNlLoading(false);
+    }
+  };
+
+  const handleNlNavigate = () => {
+    if (!nlResult) return;
+    // 转换 me → 当前用户名
+    const me = (() => {
+      try {
+        const raw = localStorage.getItem('avm-auth');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.user?.displayName) return parsed.user.displayName;
+        }
+      } catch { /* ignore */ }
+      return '我';
+    })();
+    let url = nlResult.url;
+    if (nlResult.filters.assignee === 'me') url = url.replace('assignee=me', `assignee=${encodeURIComponent(me)}`);
+    if (nlResult.filters.reporter === 'me') url = url.replace('reporter=me', `reporter=${encodeURIComponent(me)}`);
+    navigate(url);
+    setNlResult(null);
+    setSearchQ('');
+    setNlMode(false);
   };
 
   // 全局搜索
@@ -254,6 +316,7 @@ export default function App() {
   const handleMarkAllRead = async () => {
     await notificationApi.markAllRead(CURRENT_USER);
     setUnreadCount(0);
+    setNotifPreview([]);  // V1.52: 全部已读后清空预览
     message.success('已全部标为已读');
   };
 
@@ -270,6 +333,34 @@ export default function App() {
         <span style={{ fontWeight: 500 }}>未读通知（{unreadCount}）</span>
         <Button type="link" size="small" onClick={handleMarkAllRead} disabled={unreadCount === 0}>全部已读</Button>
       </Space>
+      {notifPreview.length === 0 ? (
+        <div style={{ padding: '20px 0', color: '#999', textAlign: 'center', fontSize: 12 }}>暂无未读</div>
+      ) : (
+        <List
+          size="small"
+          dataSource={notifPreview}
+          renderItem={(n: any) => (
+            <List.Item
+              style={{ cursor: n.link ? 'pointer' : 'default', padding: '6px 8px' }}
+              onClick={() => { if (n.link) navigate(n.link); }}
+            >
+              <List.Item.Meta
+                title={
+                  <Space size={4}>
+                    <span style={{ fontSize: 12 }}>{
+                      n.kind === 'watch_status_change' || n.kind === 'watch_comment_added' ? '⭐' :
+                      n.kind === 'mention' ? '💬' : n.kind === 'handover' ? '🔄' :
+                      n.kind === 'dep_overdue' ? '📦' : n.kind === 'risk_alert' ? '🚨' : '🔔'
+                    }</span>
+                    <span style={{ fontSize: 13 }}>{n.title}</span>
+                  </Space>
+                }
+                description={<span style={{ fontSize: 11, color: '#999' }}>{(n.content || '').slice(0, 50)}</span>}
+              />
+            </List.Item>
+          )}
+        />
+      )}
       <Button type="link" block onClick={() => { navigate('/notifications'); }}>
         打开通知中心
       </Button>
@@ -349,6 +440,7 @@ export default function App() {
               children: [
                 { key: 'workbench', icon: <AppstoreOutlined />, label: <Link to="/workbench">工作台</Link> },
                 { key: 'dashboard', icon: <BarChartOutlined />, label: <Link to="/dashboard">项目仪表盘</Link> },
+                { key: 'watching', icon: <StarOutlined />, label: <Link to="/watching">我的关注</Link> },
               ],
             },
             // ========== 2. 工作项 (核心实体) ==========
@@ -465,16 +557,67 @@ export default function App() {
           </Space>
 
           <Space size={16} style={{ flex: 1, justifyContent: 'flex-end' }}>
-            {/* 全局搜索 */}
-            <AutoComplete
-              style={{ width: 280 }}
-              value={searchQ}
-              onChange={handleSearch}
-              placeholder="搜索工作项/迭代/图表/人员..."
-              allowClear
-            />
-            {searchResults.length > 0 && (
-              <div style={{ position: 'absolute', top: 56, right: 320, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 480, maxHeight: 480, overflow: 'auto' }}>
+            {/* V1.50: 全局搜索（关键词 + NL 双模式） */}
+            <div style={{ position: 'relative', width: 'clamp(180px, 30vw, 320px)' }}>
+              <Input.Group compact>
+                <Tooltip title={nlMode ? '切换到关键词搜索' : '切换到 AI 自然语言搜索（如「上周延期项目」）'}>
+                  <Button
+                    size="middle"
+                    type={nlMode ? 'primary' : 'default'}
+                    icon={<RobotOutlined />}
+                    onClick={() => { setNlMode(!nlMode); setNlResult(null); setSearchResults([]); setSearchQ(''); }}
+                    style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                  />
+                </Tooltip>
+                {nlMode ? (
+                  <Input.Search
+                    style={{ width: 'calc(100% - 40px)' }}
+                    value={searchQ}
+                    onChange={e => setSearchQ(e.target.value)}
+                    onSearch={(v) => handleNlSearch(v)}
+                    placeholder="试试「上周延期项目」「我负责的 P0 需求」"
+                    allowClear
+                    enterButton={nlLoading ? <Spin size="small" /> : <ThunderboltOutlined />}
+                    loading={nlLoading}
+                  />
+                ) : (
+                  <AutoComplete
+                    style={{ width: 'calc(100% - 40px)' }}
+                    value={searchQ}
+                    onChange={handleSearch}
+                    placeholder="搜索工作项/迭代/图表/人员..."
+                    allowClear
+                  />
+                )}
+              </Input.Group>
+              {/* NL 解析结果弹层 */}
+              {nlMode && nlResult && (
+                <div style={{ position: 'absolute', top: 40, right: 0, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 12 }}>
+                  <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                    <Space size={6}>
+                      <Tag color="blue" icon={<RobotOutlined />}>AI 解析</Tag>
+                      <Tag color={nlResult.source === 'llm' ? 'green' : 'orange'}>{nlResult.source === 'llm' ? 'LLM' : '规则'}</Tag>
+                      {nlResult.confidence != null && <Tag color="default">置信 {Math.round(nlResult.confidence * 100)}%</Tag>}
+                    </Space>
+                    <div style={{ fontSize: 12, color: '#666' }}>{nlResult.humanReadable || '已解析筛选条件'}</div>
+                    {Object.keys(nlResult.filters).length > 0 && (
+                      <Space wrap size={4}>
+                        {Object.entries(nlResult.filters).map(([k, v]) => (
+                          <Tag key={k} color="geekblue" style={{ fontSize: 11 }}>
+                            {k} = {String(v)}
+                          </Tag>
+                        ))}
+                      </Space>
+                    )}
+                    <Button type="primary" block size="small" icon={<ArrowRightOutlined />} onClick={handleNlNavigate}>
+                      跳转到{nlResult.target === 'project' ? '项目' : nlResult.target === 'customer' ? '客户' : '工作项'}列表
+                    </Button>
+                  </Space>
+                </div>
+              )}
+            </div>
+            {searchResults.length > 0 && !nlMode && (
+              <div style={{ position: 'absolute', top: 56, right: 'max(16px, calc((100vw - 720px) / 2))', zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', maxHeight: 480, overflow: 'auto' }}>
                 <List
                   size="small"
                   dataSource={searchResults}
@@ -513,6 +656,17 @@ export default function App() {
             {/* V1.15: ws 状态指示 */}
             <Tooltip title={wsStatus === 'connected' ? '实时通知已连接' : wsStatus === 'connecting' ? '连接中…' : '通知离线 (将自动重连)'}>
               {wsStatus === 'connected' ? <WifiOutlined style={{ fontSize: 14, color: '#52c41a' }} /> : <DisconnectOutlined style={{ fontSize: 14, color: wsStatus === 'connecting' ? '#faad14' : '#bfbfbf' }} />}
+            </Tooltip>
+
+            {/* V1.50: 暗色主题切换 */}
+            <Tooltip title={isDark ? '切换为亮色主题' : '切换为暗色主题'}>
+              <Button
+                type="text"
+                shape="circle"
+                icon={isDark ? <BulbFilled style={{ color: '#faad14', fontSize: 16 }} /> : <BulbOutlined style={{ fontSize: 16 }} />}
+                onClick={toggleTheme}
+                aria-label="切换主题"
+              />
             </Tooltip>
 
             <Dropdown

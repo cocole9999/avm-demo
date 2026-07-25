@@ -25,9 +25,27 @@ export default defineConfig({
     },
   },
   // V1.30.2: 排除测试文件, 防止被 build 进生产产物
+  // V1.46.1: manualChunks 拆分 vendor, 主 chunk 从 2.9MB 降至 ~200KB
   build: {
     rollupOptions: {
       external: [/\.test\./, /\.spec\./],
+      output: {
+        manualChunks: {
+          // React 核心 (首屏必需, 体积小, 单独 chunk 利于长期缓存)
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // antd 生态 (体积大, 但首屏必需)
+          // 注意: @xyflow/react 内部依赖 antd, 合并到 vendor-antd 避免循环依赖
+          'vendor-antd': ['antd', '@ant-design/icons', 'antd-style', '@xyflow/react'],
+          // ECharts (仅在度量/仪表盘/分析页用, 拆出后首屏不加载)
+          'vendor-echarts': ['echarts', 'echarts-for-react'],
+          // 拖拽 (仅部分页面用)
+          'vendor-dnd': ['@dnd-kit/core', '@dnd-kit/sortable'],
+          // Markdown 渲染 (仅报告/AI 页用)
+          'vendor-markdown': ['react-markdown', 'remark-gfm', 'marked', 'dompurify'],
+          // 其它工具库
+          'vendor-utils': ['axios', 'dayjs', '@sentry/react'],
+        },
+      },
     },
   },
 });

@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Table, Tag, Button, Space, Modal, Form, Input, Select, message, Avatar } from 'antd';
-import { PlusOutlined, AuditOutlined, EyeOutlined } from '@ant-design/icons';
+import { PlusOutlined, AuditOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { reviewApi, workItemApi } from '../api';
 import type { Review, ReviewTemplate } from '../types';
+import { notifyApiError } from '../utils/apiError';
+import { useSavedFilters } from '../hooks/useSavedFilters';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 
 const REVIEW_TYPE_LABEL: Record<string, string> = { tr: '技术评审 TR', dcp: '决策评审 DCP', qr: '质量评审 QR' };
 const REVIEW_TYPE_COLOR: Record<string, string> = { tr: 'blue', dcp: 'purple', qr: 'cyan' };
@@ -24,7 +27,33 @@ export function ReviewsPage() {
   const [form] = Form.useForm();
   const [workItems, setWorkItems] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  // V1.52: 关键词 + 类型 + 状态筛选
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string | undefined>();
+  const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const navigate = useNavigate();
+
+  // V1.52: 已保存筛选
+  const currentFilters = useMemo(() => ({
+    q, type: typeFilter || '', status: statusFilter || '',
+  }), [q, typeFilter, statusFilter]);
+  const { savedFilters, saveFilter, deleteFilter, shareFilter, cloudError } =
+    useSavedFilters('review-list', currentFilters, { cloudSync: true });
+
+  const filteredReviews = useMemo(() => {
+    let list = reviews;
+    if (typeFilter) list = list.filter(r => r.reviewType === typeFilter);
+    if (statusFilter) list = list.filter(r => r.status === statusFilter);
+    if (q.trim()) {
+      const k = q.toLowerCase();
+      list = list.filter(r =>
+        (r.title || '').toLowerCase().includes(k) ||
+        (r.initiator || '').toLowerCase().includes(k) ||
+        (r.workItem?.key || '').toLowerCase().includes(k),
+      );
+    }
+    return list;
+  }, [reviews, q, typeFilter, statusFilter]);
 
   const load = async () => {
     setLoading(true);
@@ -69,9 +98,8 @@ export function ReviewsPage() {
       setModalOpen(false);
       form.resetFields();
       navigate(`/reviews/${created.id}`);
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('发起失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '发起失败：');
     }
   };
 
@@ -84,11 +112,43 @@ export function ReviewsPage() {
   return (
     <div>
       <Card style={{ marginBottom: 12 }} styles={{ body: { padding: 12 } }}>
-        <Space>
+        <Space wrap>
           <span style={{ fontSize: 16, fontWeight: 500 }}>
             <AuditOutlined /> 评审中心
           </span>
           <span style={{ color: '#999' }}>TR/DCP/QR 评审管理与追踪</span>
+          <Input.Search
+            placeholder="搜索标题/工作项/发起人" allowClear
+            style={{ width: 220 }}
+            value={q} onChange={e => setQ(e.target.value)}
+          />
+          <Select
+            placeholder="类型" allowClear
+            value={typeFilter} onChange={setTypeFilter}
+            style={{ width: 140 }}
+            options={Object.entries(REVIEW_TYPE_LABEL).map(([k, v]) => ({ value: k, label: v }))}
+          />
+          <Select
+            placeholder="状态" allowClear
+            value={statusFilter} onChange={setStatusFilter}
+            style={{ width: 110 }}
+            options={Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: k, label: v }))}
+          />
+          {/* V1.52: 已保存筛选 + 团队共享 */}
+          <SavedFilterButton
+            currentFilters={currentFilters}
+            applyFilters={(f) => {
+              setQ(f.q || '');
+              setTypeFilter(f.type || undefined);
+              setStatusFilter(f.status || undefined);
+            }}
+            savedFilters={savedFilters}
+            onSave={(name, shared) => saveFilter(name, shared)}
+            onDelete={(id) => deleteFilter(id)}
+            onShare={(id, shared) => shareFilter(id, shared)}
+            cloudError={cloudError}
+          />
+          <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
             发起评审
           </Button>
@@ -98,7 +158,7 @@ export function ReviewsPage() {
       <Card>
         <Table
           rowKey="id"
-          dataSource={reviews}
+          dataSource={filteredReviews}
           loading={loading}
           pagination={{ pageSize: 20 }}
           columns={[

@@ -69,8 +69,9 @@ export const PROVIDERS = [
   {
     key: 'deepseek', name: 'DeepSeek', logo: '🔵', defaultBaseUrl: 'https://api.deepseek.com', defaultModel: 'deepseek-v4-pro', protocol: 'openai',
     capabilities: { vision: false, file: false },
-    // 移除 v3 老模型 (deepseek-chat/coder/reasoner) — API 已升级 v4，老模型名调用时被服务端 fallback
-    models: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-coder', 'deepseek-v4-reasoner'],
+    // V1.47: 移除 v3 老模型 (deepseek-chat/coder/reasoner) 与已下线的 v4-coder/v4-reasoner
+    // API 已升级 v4，仅保留 pro / flash 两个主力模型
+    models: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   },
   {
     key: 'MiniMax', name: 'MiniMax', logo: '🟧', defaultBaseUrl: 'https://api.MiniMax.chat/v1', defaultModel: 'MiniMax-Text-01', protocol: 'openai',
@@ -116,7 +117,7 @@ function inferMaxOutputTokens(model: string): number {
   if (m.includes('opus') || m.includes('gpt-5') || m.includes('gpt-4.1') || m.includes('deepseek-v4')) return 16384;
   if (m.includes('claude') || m.includes('MiniMax-text-01') || m.includes('MiniMax-2')) return 8192;
   if (m.includes('o1') || m.includes('o3') || m.includes('o4')) return 32768;
-  if (m.includes('deepseek-reasoner') || m.includes('r1') || m.includes('deepseek-v4-reasoner')) return 16384;
+  if (m.includes('deepseek-reasoner') || m.includes('r1')) return 16384;
   if (m.includes('gemini') || m.includes('qwen3-max') || m.includes('kimi-k2')) return 16384;
   if (m.includes('gpt-4o') || m.includes('gpt-4.1') || m.includes('glm-4.6')) return 16384;
   if (m.includes('gpt-5-mini') || m.includes('gpt-4.1-mini') || m.includes('qwen3')) return 8192;

@@ -11,9 +11,15 @@
  *   - 'pong' { ts }
  *
  * 注意: 同一 token 多 tab 连接 → 后端会按 userId 聚合推送
+ *
+ * V1.48: 清理 console 残留（包 import.meta.env.DEV 门控）+ 修复 any 类型 + 端口可配置
  */
 type WSMessage = { type: string; [k: string]: any };
 type Handler = (msg: WSMessage) => void;
+type WsStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed';
+
+// V1.48: WS 端口可配置（开发 4001，生产通常与 API 同源通过 nginx 反代）
+const WS_PORT = import.meta.env.VITE_WS_PORT || '4001';
 
 class WsClient {
   private ws: WebSocket | null = null;
@@ -21,19 +27,19 @@ class WsClient {
   private token = '';
   private handlers = new Map<string, Set<Handler>>();
   private reconnectAttempts = 0;
-  private reconnectTimer: any = null;
-  private pingTimer: any = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pingTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
-  private status: 'idle' | 'connecting' | 'connected' | 'disconnected' | 'failed' = 'idle';
-  private statusListeners = new Set<(s: string) => void>();
+  private status: WsStatus = 'idle';
+  private statusListeners = new Set<(s: WsStatus) => void>();
 
   /** 建立连接 (有 token 立即连接) */
   connect(token: string) {
     this.token = token;
-    // 自动探测 host (从 location.host 拿 hostname, port 用 4001)
+    // 自动探测 host (从 location.host 拿 hostname, port 由 VITE_WS_PORT 配置)
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = location.hostname || '127.0.0.1';
-    this.url = `${proto}//${host}:4001/api/ws?token=${encodeURIComponent(token)}`;
+    this.url = `${proto}//${host}:${WS_PORT}/api/ws?token=${encodeURIComponent(token)}`;
     this.stopped = false;
     this.open();
   }
@@ -45,7 +51,7 @@ class WsClient {
     try {
       this.ws = new WebSocket(this.url);
     } catch (e) {
-      console.error('[ws] create failed:', e);
+      if (import.meta.env.DEV) console.error('[ws] create failed:', e);
       this.scheduleReconnect();
       return;
     }
@@ -61,7 +67,7 @@ class WsClient {
         if (m.type === 'pong') return; // 心跳不外抛
         this.emit(m);
       } catch (e) {
-        console.error('[ws] parse error:', e);
+        if (import.meta.env.DEV) console.error('[ws] parse error:', e);
       }
     };
     this.ws.onclose = (ev) => {
@@ -70,9 +76,9 @@ class WsClient {
       this.emit({ type: 'disconnected', code: ev.code, reason: ev.reason });
       if (!this.stopped) this.scheduleReconnect();
     };
-    this.ws.onerror = (e) => {
-      console.warn('[ws] error:', e);
-      // onclose 会跟
+    this.ws.onerror = () => {
+      // V1.48: 仅 dev 打印，生产由 onclose 兜底
+      if (import.meta.env.DEV) console.warn('[ws] error event');
     };
   }
 
@@ -81,7 +87,7 @@ class WsClient {
     if (this.reconnectTimer) return;
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
     this.reconnectAttempts++;
-    console.log(`[ws] reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
+    if (import.meta.env.DEV) console.log(`[ws] reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.open();
@@ -125,8 +131,12 @@ class WsClient {
   }
 
   private emit(msg: WSMessage) {
-    this.handlers.get(msg.type)?.forEach(h => { try { h(msg); } catch (e) { console.error(e); } });
-    this.handlers.get('*')?.forEach(h => { try { h(msg); } catch (e) { console.error(e); } });
+    this.handlers.get(msg.type)?.forEach(h => {
+      try { h(msg); } catch (e) { if (import.meta.env.DEV) console.error(e); }
+    });
+    this.handlers.get('*')?.forEach(h => {
+      try { h(msg); } catch (e) { if (import.meta.env.DEV) console.error(e); }
+    });
   }
 
   private getCurrentUser() {
@@ -138,12 +148,12 @@ class WsClient {
   }
 
   getStatus() { return this.status; }
-  onStatusChange(fn: (s: string) => void): () => void {
+  onStatusChange(fn: (s: WsStatus) => void): () => void {
     this.statusListeners.add(fn);
     fn(this.status);
     return () => { this.statusListeners.delete(fn); };
   }
-  private setStatus(s: any) {
+  private setStatus(s: WsStatus) {
     this.status = s;
     this.statusListeners.forEach(fn => fn(s));
   }

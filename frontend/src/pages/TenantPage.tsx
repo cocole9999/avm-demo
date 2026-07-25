@@ -4,7 +4,7 @@
  * - SSO 配置（飞书）
  * - 登录日志
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Card, Table, Tag, Space, Button, Modal, Form, Input, Select, Switch, message, Tabs,
   Empty, Alert, Drawer, Statistic, Row, Col, Popconfirm, Tooltip, Input as AntInput,
@@ -12,9 +12,12 @@ import {
 import {
   BankOutlined, PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined,
   SafetyCertificateOutlined, HistoryOutlined, LinkOutlined, RocketOutlined,
-  CheckCircleOutlined, CloseCircleOutlined,
+  CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined,
 } from '@ant-design/icons';
 import { ssoApi } from '../api';
+import { notifyApiError } from '../utils/apiError';
+import { useSavedFilters } from '../hooks/useSavedFilters';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 
 const PLAN_LABEL: Record<string, { label: string; color: string }> = {
   standard: { label: '标准版', color: 'blue' },
@@ -40,13 +43,35 @@ export function TenantPage() {
   const [drawerLogs, setDrawerLogs] = useState<any[]>([]);
   const [settingForm] = Form.useForm();
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  // V1.52: 关键词 + 套餐筛选
+  const [q, setQ] = useState('');
+  const [planFilter, setPlanFilter] = useState<string | undefined>();
+
+  // V1.52: 已保存筛选
+  const currentFilters = useMemo(() => ({ q, plan: planFilter || '' }), [q, planFilter]);
+  const { savedFilters, saveFilter, deleteFilter, shareFilter, cloudError } =
+    useSavedFilters('tenant-list', currentFilters, { cloudSync: true });
+
+  const filteredTenants = useMemo(() => {
+    let list = tenants;
+    if (planFilter) list = list.filter(t => t.plan === planFilter);
+    if (q.trim()) {
+      const k = q.toLowerCase();
+      list = list.filter(t =>
+        (t.code || '').toLowerCase().includes(k) ||
+        (t.name || '').toLowerCase().includes(k) ||
+        (t.shortName || '').toLowerCase().includes(k),
+      );
+    }
+    return list;
+  }, [tenants, q, planFilter]);
 
   const load = async () => {
     setLoading(true);
     try {
       const list = await ssoApi.listTenants();
       setTenants(list);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
     finally { setLoading(false); }
   };
 
@@ -76,12 +101,12 @@ export function TenantPage() {
       }
       setModalOpen(false);
       load();
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
   };
 
   const remove = async (id: string) => {
     try { await ssoApi.deleteTenant(id); message.success('已删除'); load(); }
-    catch (e: any) { message.error(e.message); }
+    catch (e) { notifyApiError(e); }
   };
 
   const openDrawer = async (t: any) => {
@@ -97,7 +122,7 @@ export function TenantPage() {
       setDrawerSettings(settings);
       setDrawerStats(stats);
       setDrawerLogs(logs);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
   };
 
   const upsertSetting = async (provider: string) => {
@@ -108,7 +133,7 @@ export function TenantPage() {
       setEditingProvider(null);
       const settings = await ssoApi.getSettings(drawerTenant.id);
       setDrawerSettings(settings);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
   };
 
   const tryFeishuLogin = async () => {
@@ -128,7 +153,7 @@ export function TenantPage() {
           </div>
         ),
       });
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
   };
 
   const demoLogin = async () => {
@@ -141,7 +166,7 @@ export function TenantPage() {
       message.success(`登录成功，token: ${r.token.slice(0, 16)}...`);
       const logs = await ssoApi.logs({ tenantId: drawerTenant.id, limit: 20 });
       setDrawerLogs(logs);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
   };
 
   return (
@@ -155,9 +180,37 @@ export function TenantPage() {
           </Space>
         }
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新建企业
-          </Button>
+          <Space wrap>
+            <Input.Search
+              placeholder="搜索代码/名称/简称"
+              allowClear style={{ width: 200 }}
+              value={q}
+              onChange={e => setQ(e.target.value)}
+            />
+            <Select
+              placeholder="套餐" allowClear
+              value={planFilter} onChange={setPlanFilter}
+              style={{ width: 120 }}
+              options={Object.entries(PLAN_LABEL).map(([k, v]) => ({ value: k, label: v.label }))}
+            />
+            {/* V1.52: 已保存筛选 + 团队共享 */}
+            <SavedFilterButton
+              currentFilters={currentFilters}
+              applyFilters={(f) => {
+                setQ(f.q || '');
+                setPlanFilter(f.plan || undefined);
+              }}
+              savedFilters={savedFilters}
+              onSave={(name, shared) => saveFilter(name, shared)}
+              onDelete={(id) => deleteFilter(id)}
+              onShare={(id, shared) => shareFilter(id, shared)}
+              cloudError={cloudError}
+            />
+            <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              新建企业
+            </Button>
+          </Space>
         }
         style={{ borderRadius: 8 }}
       >
@@ -172,7 +225,7 @@ export function TenantPage() {
           }
         />
         <Table
-          rowKey="id" loading={loading} dataSource={tenants} pagination={{ pageSize: 10 }}
+          rowKey="id" loading={loading} dataSource={filteredTenants} pagination={{ pageSize: 10 }}
           columns={[
             { title: '企业代码', dataIndex: 'code', width: 120, render: v => <code>{v}</code> },
             { title: '企业名称', dataIndex: 'name', render: (v, r) => <a onClick={() => openDrawer(r)}>{v}</a> },

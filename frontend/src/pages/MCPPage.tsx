@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Card, Tabs, Tag, Space, Input, Select, Button, Form, Empty, message, Alert, Row, Col, List, Spin, Divider, InputNumber } from 'antd';
 import { ApiOutlined, PlayCircleOutlined, ToolOutlined, FileTextOutlined, CodeOutlined, BulbOutlined } from '@ant-design/icons';
 import { mcpApi } from '../api';
+import { notifyApiError, extractApiError } from '../utils/apiError';
 
 export function MCPPage() {
   const [info, setInfo] = useState<any>(null);
@@ -41,9 +42,9 @@ export function MCPPage() {
       const r = await mcpApi.call(toolName, args);
       setCallResult(r);
       message.success(`调用成功：${toolName}`);
-    } catch (e: any) {
-      message.error(`调用失败：${e.message}`);
-      setCallResult({ error: e.message });
+    } catch (e) {
+      notifyApiError(e, '调用失败：');
+      setCallResult({ error: extractApiError(e) || '未知错误' });
     } finally { setCalling(false); }
   };
 

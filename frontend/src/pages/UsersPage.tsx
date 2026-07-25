@@ -17,6 +17,9 @@ import {
 } from '@ant-design/icons';
 import { userApi } from '../api';
 import { useAuth } from '../AuthContext';
+import { notifyApiError } from '../utils/apiError';
+import { useSavedFilters } from '../hooks/useSavedFilters';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 
 interface User {
   id: string;
@@ -46,6 +49,9 @@ export function UsersPage() {
   const [createForm] = Form.useForm();
   const [resetPwd, setResetPwd] = useState<User | null>(null);
   const [pwdForm] = Form.useForm();
+  // V1.52: 角色 + 状态筛选（默认全空）
+  const [roleFilter, setRoleFilter] = useState<string | undefined>();
+  const [activeFilter, setActiveFilter] = useState<string | undefined>();
 
   const isAdmin = me?.role === 'tenant_admin';
 
@@ -54,8 +60,8 @@ export function UsersPage() {
     try {
       const list = await userApi.list();
       setUsers(list);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
@@ -64,14 +70,27 @@ export function UsersPage() {
   useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() => {
-    if (!keyword.trim()) return users;
+    let list = users;
+    if (roleFilter) list = list.filter(u => u.role === roleFilter);
+    if (activeFilter === 'active') list = list.filter(u => u.active);
+    else if (activeFilter === 'inactive') list = list.filter(u => !u.active);
+    if (!keyword.trim()) return list;
     const k = keyword.toLowerCase();
-    return users.filter(u =>
+    return list.filter(u =>
       u.username.toLowerCase().includes(k) ||
       u.displayName.toLowerCase().includes(k) ||
       (u.department || '').toLowerCase().includes(k)
     );
-  }, [users, keyword]);
+  }, [users, keyword, roleFilter, activeFilter]);
+
+  // V1.52: 已保存筛选（localStorage 缓存 + 云端共享）
+  const currentFilters = useMemo(() => ({
+    q: keyword,
+    role: roleFilter || '',
+    active: activeFilter || '',
+  }), [keyword, roleFilter, activeFilter]);
+  const { savedFilters, saveFilter, deleteFilter, shareFilter, cloudError } =
+    useSavedFilters('user-list', currentFilters, { cloudSync: true });
 
   const stats = useMemo(() => {
     const byRole: Record<string, number> = {};
@@ -93,9 +112,8 @@ export function UsersPage() {
       message.success(`✓ ${editing.displayName} 角色已更新为 ${ROLE_LABEL[values.role] || values.role}`);
       setEditing(null);
       load();
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('保存失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 
@@ -114,8 +132,8 @@ export function UsersPage() {
           await userApi.update(u.id, { active: !u.active });
           message.success(`✓ ${u.displayName} 已${action}`);
           load();
-        } catch (e: any) {
-          message.error('操作失败：' + e.message);
+        } catch (e) {
+          notifyApiError(e, '操作失败：');
         }
       },
     });
@@ -145,9 +163,8 @@ export function UsersPage() {
       message.success(`✓ ${resetPwd.displayName} 密码已重置`);
       setResetPwd(null);
       pwdForm.resetFields();
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('重置失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '重置失败：');
     }
   };
 
@@ -189,12 +206,46 @@ export function UsersPage() {
       <Card
         title={<Space><UserOutlined /><span>用户管理</span></Space>}
         extra={
-          <Space>
+          <Space wrap>
             <Input.Search
               placeholder="搜索用户名 / 姓名 / 部门"
               allowClear
-              style={{ width: 260 }}
+              style={{ width: 240 }}
               onSearch={setKeyword}
+            />
+            {/* V1.52: 角色 + 状态筛选 */}
+            <Select
+              placeholder="角色"
+              allowClear
+              value={roleFilter}
+              onChange={setRoleFilter}
+              style={{ width: 130 }}
+              options={Object.entries(ROLE_LABEL).map(([k, v]) => ({ value: k, label: v }))}
+            />
+            <Select
+              placeholder="状态"
+              allowClear
+              value={activeFilter}
+              onChange={setActiveFilter}
+              style={{ width: 100 }}
+              options={[
+                { value: 'active', label: '启用' },
+                { value: 'inactive', label: '停用' },
+              ]}
+            />
+            {/* V1.52: 已保存筛选 + 团队共享 */}
+            <SavedFilterButton
+              currentFilters={currentFilters}
+              applyFilters={(f) => {
+                setKeyword(f.q || '');
+                setRoleFilter(f.role || undefined);
+                setActiveFilter(f.active || undefined);
+              }}
+              savedFilters={savedFilters}
+              onSave={(name, shared) => saveFilter(name, shared)}
+              onDelete={(id) => deleteFilter(id)}
+              onShare={(id, shared) => shareFilter(id, shared)}
+              cloudError={cloudError}
             />
             <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>新建用户</Button>

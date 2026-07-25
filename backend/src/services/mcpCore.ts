@@ -1,228 +1,87 @@
 /**
- * MCP Server 核心 - 工具/资源/提示词定义与执行
- * 同时被 HTTP 路由（routes/mcp.ts）和 stdio 入口（bin/mcp-stdio.ts）使用
+ * MCP Server 核心 - 工具/资源/提示词定义与执行 (V1.47 重构)
+ *
+ * 重构说明：
+ *   - 不再硬编码 13 个工具，改为从 [[aiTools]] 全量桥接 124 个工具
+ *     （9 核心 + 18 扩展 + 97 QUERY_TOOLS）
+ *   - executeTool 增加用户上下文 (ctx)，支持 HTTP 模式注入 req.user
+ *   - stdio 模式通过环境变量 AVM_MCP_TOKEN 传入 JWT
+ *   - 同时被 HTTP 路由（routes/mcp.ts）和 stdio 入口（bin/mcp-stdio.ts）使用
  */
 import { prisma } from '../db';
 import { TYPE_PREFIX } from '../constants';
+import { TOOLS as AI_TOOLS, executeTool as executeAiTool } from './aiTools';
+import type { ToolDefinition } from './aiTools/types';
 
-export const MCP_TOOLS = [
-  {
-    name: 'list_work_items',
-    description: '查询工作项列表。支持按类型、状态、优先级、负责人、迭代过滤。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        type: { type: 'string', enum: ['requirement', 'task', 'bug', 'release'], description: '工作项类型' },
-        status: { type: 'string', description: '状态（如：待评审、开发中、已完成）' },
-        priority: { type: 'string', enum: ['P0', 'P1', 'P2', 'P3'], description: '优先级' },
-        assignee: { type: 'string', description: '负责人' },
-        iterationId: { type: 'string', description: '迭代 ID' },
-        limit: { type: 'number', description: '返回数量（默认 20）' },
-      },
-    },
-  },
-  {
-    name: 'get_work_item',
-    description: '获取工作项详情，含评论、子项、关联。',
-    inputSchema: {
-      type: 'object',
-      required: ['id'],
-      properties: { id: { type: 'string', description: '工作项 ID' } },
-    },
-  },
-  {
-    name: 'create_work_item',
-    description: '创建工作项。',
-    inputSchema: {
-      type: 'object',
-      required: ['type', 'title'],
-      properties: {
-        type: { type: 'string', enum: ['requirement', 'task', 'bug', 'release'] },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        priority: { type: 'string', enum: ['P0', 'P1', 'P2', 'P3'] },
-        assignee: { type: 'string' },
-        estimate: { type: 'number' },
-        module: { type: 'string' },
-        reporter: { type: 'string' },
-      },
-    },
-  },
-  {
-    name: 'update_work_item',
-    description: '更新工作项（状态、负责人、估分等）。',
-    inputSchema: {
-      type: 'object',
-      required: ['id'],
-      properties: {
-        id: { type: 'string' },
-        status: { type: 'string' },
-        priority: { type: 'string' },
-        assignee: { type: 'string' },
-        estimate: { type: 'number' },
-        actualHours: { type: 'number' },
-        description: { type: 'string' },
-      },
-    },
-  },
-  {
-    name: 'add_comment',
-    description: '为工作项添加评论。',
-    inputSchema: {
-      type: 'object',
-      required: ['workItemId', 'content'],
-      properties: {
-        workItemId: { type: 'string' },
-        content: { type: 'string' },
-        author: { type: 'string' },
-      },
-    },
-  },
-  {
-    name: 'search',
-    description: '全局搜索：工作项、迭代、评审、图表、用户。',
-    inputSchema: {
-      type: 'object',
-      required: ['q'],
-      properties: { q: { type: 'string', description: '搜索关键词' } },
-    },
-  },
-  {
-    name: 'get_metrics',
-    description: '获取项目核心指标：总数、状态分布、优先级分布、临期、超期。',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'get_team_workload',
-    description: '获取团队成员工作量统计。',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'analyze_resources',
-    description: 'AI 人力分析：评估时间窗内团队利用率、风险和建议。',
-    inputSchema: {
-      type: 'object',
-      required: ['startDate', 'endDate'],
-      properties: {
-        startDate: { type: 'string', description: 'YYYY-MM-DD' },
-        endDate: { type: 'string', description: 'YYYY-MM-DD' },
-      },
-    },
-  },
-  {
-    name: 'trigger_automation',
-    description: '手动触发一条自动化规则。',
-    inputSchema: {
-      type: 'object',
-      required: ['ruleId', 'context'],
-      properties: {
-        ruleId: { type: 'string' },
-        context: { type: 'object' },
-      },
-    },
-  },
-  {
-    name: 'ai_qa',
-    description: '对项目数据提问（启发式智能问答）。',
-    inputSchema: {
-      type: 'object',
-      required: ['question'],
-      properties: { question: { type: 'string' } },
-    },
-  },
-  {
-    name: 'ai_estimate',
-    description: '基于历史相似工作项的估分建议。',
-    inputSchema: {
-      type: 'object',
-      required: ['type', 'title'],
-      properties: {
-        type: { type: 'string' },
-        title: { type: 'string' },
-        description: { type: 'string' },
-        module: { type: 'string' },
-      },
-    },
-  },
-  {
-    name: 'ai_classify_bug',
-    description: '对缺陷描述进行自动归类。',
-    inputSchema: {
-      type: 'object',
-      required: ['title'],
-      properties: {
-        title: { type: 'string' },
-        description: { type: 'string' },
-      },
-    },
-  },
-];
+// ========== 用户上下文 ==========
+export interface McpUserContext {
+  userId?: string;
+  tenantId?: string;
+  role?: string;
+  username?: string;
+  spaceId?: string;
+  /** 是否为 stdio 模式（无 HTTP 上下文） */
+  stdio?: boolean;
+}
 
-export async function executeTool(name: string, args: any): Promise<any> {
+// ========== 旧版 13 个工具的元数据保留（供 listResources/prompts 引用） ==========
+// 这些工具已合并到 AI_TOOLS 中（list_work_items/get_work_item/create_work_item/
+// update_work_item/add_comment/search/get_metrics/get_team_workload/analyze_resources/
+// trigger_automation/ai_qa/ai_estimate/ai_classify_bug 在 aiTools.ts 或 aiToolsExt.ts 中实现）
+
+// ========== 工具桥接适配器 ==========
+/**
+ * 把 ToolDefinition 转成 MCP tool schema 格式
+ * ToolDefinition.parameters → MCP inputSchema
+ */
+function toolDefinitionToMcp(tool: ToolDefinition) {
+  return {
+    name: tool.name,
+    description: tool.description,
+    inputSchema: tool.parameters,
+  };
+}
+
+/**
+ * 动态生成 MCP 工具列表（从 AI_TOOLS 全量桥接）
+ */
+function buildMcpTools() {
+  return AI_TOOLS.map(toolDefinitionToMcp);
+}
+
+// 缓存工具列表（AI_TOOLS 在运行时是静态的，构建一次即可）
+let _cachedTools: ReturnType<typeof buildMcpTools> | null = null;
+function getMcpTools() {
+  if (!_cachedTools) _cachedTools = buildMcpTools();
+  return _cachedTools;
+}
+
+// 旧导出保留向后兼容（routes/mcp.ts 使用）
+export const MCP_TOOLS = getMcpTools();
+
+// ========== 工具执行分发器 ==========
+/**
+ * 执行 MCP 工具
+ * V1.47: 委托给 aiTools.ts 的 executeTool（统一工具执行入口）
+ *
+ * @param name 工具名（snake_case）
+ * @param args 工具参数
+ * @param ctx 用户上下文（V1.47 新增，用于后续权限校验）
+ */
+export async function executeTool(name: string, args: any, ctx?: McpUserContext): Promise<any> {
+  // 先查 AI_TOOLS 中的工具（124 个）
+  const aiTool = AI_TOOLS.find(t => t.name === name);
+  if (aiTool) {
+    // 注入 ctx 到 args（供工具内部使用，当前工具实现未读取，后续可逐步接入）
+    // 这里采用"显式传递"而非"全局变量"，便于后续审计
+    const enrichedArgs = ctx ? { ...args, _ctx: ctx } : args;
+    return await executeAiTool(name, enrichedArgs);
+  }
+
+  // 旧版 13 个工具中有些不在 AI_TOOLS 里（如 get_metrics / get_team_workload /
+  // analyze_resources / trigger_automation / ai_qa / ai_estimate / ai_classify_bug），
+  // 这些保留原 mcpCore 的实现作为 fallback
   switch (name) {
-    case 'list_work_items': {
-      const where: any = {};
-      if (args.type) where.type = args.type;
-      if (args.status) where.status = args.status;
-      if (args.priority) where.priority = args.priority;
-      if (args.assignee) where.assignee = args.assignee;
-      if (args.iterationId) where.iterationId = args.iterationId;
-      return prisma.workItem.findMany({
-        where, take: Number(args.limit) || 20,
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true, key: true, title: true, type: true, status: true, priority: true, assignee: true, estimate: true, planEnd: true, updatedAt: true },
-      });
-    }
-    case 'get_work_item': {
-      return prisma.workItem.findUnique({
-        where: { id: args.id },
-        include: {
-          comments: { orderBy: { createdAt: 'desc' }, take: 10 },
-          children: { select: { id: true, key: true, title: true, status: true, priority: true } },
-          _count: { select: { comments: true, children: true, reviews: true } },
-        },
-      });
-    }
-    case 'create_work_item': {
-      const count = await prisma.workItem.count({ where: { type: args.type } });
-      const prefix = TYPE_PREFIX[args.type] || 'ITEM';
-      return prisma.workItem.create({
-        data: {
-          type: args.type, key: `${prefix}-${count + 1}`, title: args.title,
-          description: args.description || '',
-          status: '待评审', priority: args.priority || 'P2',
-          assignee: args.assignee || null,
-          estimate: args.estimate || null,
-          module: args.module || null,
-          reporter: args.reporter || 'mcp',
-        },
-      });
-    }
-    case 'update_work_item': {
-      const data: any = {};
-      for (const k of ['status', 'priority', 'assignee', 'estimate', 'actualHours', 'description']) {
-        if (args[k] !== undefined) data[k] = args[k];
-      }
-      return prisma.workItem.update({ where: { id: args.id }, data });
-    }
-    case 'add_comment': {
-      return prisma.comment.create({
-        data: {
-          workItemId: args.workItemId,
-          author: args.author || 'mcp',
-          content: args.content,
-        },
-      });
-    }
-    case 'search': {
-      const q = String(args.q);
-      const items = await prisma.workItem.findMany({
-        where: { OR: [{ title: { contains: q } }, { description: { contains: q } }, { key: { contains: q } }, { assignee: { contains: q } }] },
-        take: 20,
-        select: { id: true, key: true, title: true, type: true, status: true, priority: true, assignee: true },
-      });
-      return items;
-    }
     case 'get_metrics': {
       const [total, byType, byStatus, byPriority, overdue, dueSoon] = await Promise.all([
         prisma.workItem.count(),
@@ -271,6 +130,7 @@ export async function executeTool(name: string, args: any): Promise<any> {
   }
 }
 
+// ========== 资源（保留原样） ==========
 export async function listResources() {
   const items = await prisma.workItem.findMany({
     take: 50, orderBy: { updatedAt: 'desc' },
@@ -295,19 +155,21 @@ export async function readResource(uri: string) {
   return { uri, mimeType: 'application/json', content: item };
 }
 
+// ========== JSON-RPC 2.0 共用处理器 ==========
 /**
- * JSON-RPC 2.0 共用处理器 (V1.8.5)
  * stdio 模式（mcp-stdio.ts）+ HTTP+SSE 模式（routes/mcp.ts /stream）都调这个
  * 返回 { response: JsonRpcResponse | null, isError?: boolean, rawResult?: any }
  *   - response: 给客户端的 JSON-RPC 响应（成功/错误）；null 表示通知（无 id 不返回）
  *   - toolResult: 工具调用的 content 包装（用于 SSE 序列化）
+ *
+ * V1.47: handleJsonRpcRequest 增加可选 ctx 参数，工具执行时传递
  */
 export interface JsonRpcRequest { jsonrpc?: string; id?: number | string; method: string; params?: any }
 export interface JsonRpcResponse { jsonrpc: '2.0'; id: number | string; result?: any; error?: { code: number; message: string; data?: any } }
 
 export const SERVER_INFO = {
   name: 'avm-mcp-server',
-  version: '1.0.0',
+  version: '1.47.0',
   protocolVersion: '2024-11-05',
 };
 
@@ -327,7 +189,7 @@ function toolResultContent(content: any, isError = false) {
 }
 
 /** 统一处理一个 JSON-RPC 请求，返回响应对象（id 是 undefined 时返回 null） */
-export async function handleJsonRpcRequest(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
+export async function handleJsonRpcRequest(req: JsonRpcRequest, ctx?: McpUserContext): Promise<JsonRpcResponse | null> {
   const { id, method, params } = req;
   const isNotification = id === undefined;
 
@@ -340,7 +202,7 @@ export async function handleJsonRpcRequest(req: JsonRpcRequest): Promise<JsonRpc
         if (isNotification) return null;
         return respond({
           protocolVersion: SERVER_INFO.protocolVersion,
-          serverInfo: SERVER_INFO,
+          serverInfo: { ...SERVER_INFO, toolsCount: getMcpTools().length },
           capabilities: CAPABILITIES,
         });
 
@@ -350,17 +212,17 @@ export async function handleJsonRpcRequest(req: JsonRpcRequest): Promise<JsonRpc
 
       case 'tools/list':
         if (isNotification) return null;
-        return respond({ tools: MCP_TOOLS });
+        return respond({ tools: getMcpTools() });
 
       case 'tools/call': {
         const { name, arguments: args = {} } = params || {};
-        const tool = MCP_TOOLS.find(t => t.name === name);
+        const tool = getMcpTools().find(t => t.name === name);
         if (!tool) {
           if (isNotification) return null;
           return respond(toolResultContent(`Tool not found: ${name}`, true));
         }
         try {
-          const result = await executeTool(name, args);
+          const result = await executeTool(name, args, ctx);
           if (isNotification) return null;
           return respond(toolResultContent(result));
         } catch (e: any) {

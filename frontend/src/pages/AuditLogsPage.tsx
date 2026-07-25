@@ -21,6 +21,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { auditApi, AuditLog, AuditChange, AuditMeta } from '../api';
 import { useAuth } from '../AuthContext';
+import { notifyApiError } from '../utils/apiError';
 
 const ENTITY_OPTIONS = [
   { value: 'project', label: '项目', color: 'blue', icon: <ProjectOutlined /> },
@@ -113,8 +114,8 @@ export function AuditLogsPage() {
       const data = await auditApi.list(params);
       setLogs(data.items);
       setTotal(data.total);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }

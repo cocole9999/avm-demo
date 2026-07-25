@@ -12,6 +12,8 @@ import dayjs from 'dayjs';
 import type { WorkItem, WorkItemType } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { workItemApi, iterationApi, userApi } from '../api';
+import { notifyApiError } from '../utils/apiError';
+import { DEFAULT_PAGINATION } from '../constants/pagination';
 
 interface Props {
   items: WorkItem[];
@@ -93,8 +95,8 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       setBatchOpen(false);
       setSelectedRowKeys([]);
       onRefresh();
-    } catch (e: any) {
-      message.error('批量更新失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '批量更新失败：');
     } finally {
       setSubmitting(false);
     }
@@ -146,6 +148,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       dataIndex: 'title',
       key: 'title',
       ellipsis: true,
+      sorter: (a, b) => (a.title || '').localeCompare(b.title || ''),
       render: (t, item) => (
         <a href={`/work-items/${item.type}/${item.id}`} style={{ color: '#1677ff' }}>
           {t}
@@ -157,6 +160,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       dataIndex: 'status',
       key: 'status',
       width: 110,
+      sorter: (a, b) => (a.status || '').localeCompare(b.status || ''),
       render: (s: string) => <Tag color={STATUS_COLOR[s]}>{s}</Tag>,
     },
     {
@@ -172,6 +176,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       dataIndex: 'assignee',
       key: 'assignee',
       width: 100,
+      sorter: (a, b) => (a.assignee || '').localeCompare(b.assignee || ''),
       render: (a?: string) => a ? <Space size={4}><Avatar size="small" style={{ background: '#1677ff' }}>{a[0]}</Avatar>{a}</Space> : <span style={{ color: '#ccc' }}>未指派</span>,
     },
     {
@@ -180,6 +185,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       key: 'module',
       width: 120,
       ellipsis: true,
+      sorter: (a, b) => (a.module || '').localeCompare(b.module || ''),
     },
     {
       title: '估分',
@@ -212,6 +218,11 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       title: '计划起止',
       key: 'plan',
       width: 180,
+      sorter: (a, b) => {
+        const ta = a.planStart ? dayjs(a.planStart).valueOf() : 0;
+        const tb = b.planStart ? dayjs(b.planStart).valueOf() : 0;
+        return ta - tb;
+      },
       render: (_, item) => {
         if (!item.planStart || !item.planEnd) return <span style={{ color: '#ccc' }}>-</span>;
         return (
@@ -226,6 +237,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
       dataIndex: ['iteration', 'name'],
       key: 'iteration',
       width: 140,
+      sorter: (a, b) => (a.iteration?.name || '').localeCompare(b.iteration?.name || ''),
       render: (_, item) => item.iteration ? <Tag color="cyan">{item.iteration.name}</Tag> : <span style={{ color: '#ccc' }}>-</span>,
     },
     {
@@ -290,11 +302,7 @@ export function TableView({ items, loading, onStatusChange, onDelete, onRefresh,
           onChange: setSelectedRowKeys,
         }}
         scroll={{ x: 1400 }}
-        pagination={{
-          showSizeChanger: true,
-          showTotal: t => `共 ${t} 条`,
-          pageSize: 20,
-        }}
+        pagination={DEFAULT_PAGINATION}
       />
 
       {/* V1.18 浮动批量操作栏 — 选中时从底部浮出 */}

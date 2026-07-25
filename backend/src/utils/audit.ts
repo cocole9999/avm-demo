@@ -17,7 +17,7 @@ export type AuditEntity =
   | 'project' | 'customer' | 'workItem' | 'carModel' | 'contact'
   | 'dependency' | 'user' | 'webhook' | 'automation' | 'import' | 'handover'
   | 'auth' | 'upload' | 'template' | 'field' | 'comment' | 'space' | 'role'
-  | 'flow' | 'chart' | 'dashboard' | 'review' | 'ai';
+  | 'flow' | 'chart' | 'dashboard' | 'review' | 'ai' | 'savedFilter';
 
 export type AuditAction =
   | 'create' | 'update' | 'delete' | 'login' | 'logout'

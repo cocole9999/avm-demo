@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Table, Tag, Button, Space, Modal, Form, Input, Select, message, Tooltip } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, PartitionOutlined, EyeOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, PartitionOutlined, EyeOutlined, ThunderboltOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { flowApi, aiApi } from '../api';
 import type { NodeFlow } from '../types';
+import { notifyApiError } from '../utils/apiError';
+import { useSavedFilters } from '../hooks/useSavedFilters';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 
 const TYPE_LABEL: Record<string, string> = {
   requirement: '需求', task: '任务', bug: '缺陷', release: '版本',
@@ -20,7 +23,33 @@ export function FlowsPage() {
   const [editing, setEditing] = useState<NodeFlow | null>(null);
   const [form] = Form.useForm();
   const [aiFilling, setAiFilling] = useState(false);
+  // V1.52: 关键词 + 类型筛选
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string | undefined>();
+  const [activeFilter, setActiveFilter] = useState<string | undefined>();
   const navigate = useNavigate();
+
+  // V1.52: 已保存筛选
+  const currentFilters = useMemo(() => ({
+    q, type: typeFilter || '', active: activeFilter || '',
+  }), [q, typeFilter, activeFilter]);
+  const { savedFilters, saveFilter, deleteFilter, shareFilter, cloudError } =
+    useSavedFilters('flow-list', currentFilters, { cloudSync: true });
+
+  const filteredFlows = useMemo(() => {
+    let list = flows;
+    if (typeFilter) list = list.filter(f => f.workType === typeFilter);
+    if (activeFilter === 'active') list = list.filter(f => f.isActive);
+    else if (activeFilter === 'inactive') list = list.filter(f => !f.isActive);
+    if (q.trim()) {
+      const k = q.toLowerCase();
+      list = list.filter(f =>
+        (f.name || '').toLowerCase().includes(k) ||
+        (f.description || '').toLowerCase().includes(k),
+      );
+    }
+    return list;
+  }, [flows, q, typeFilter, activeFilter]);
 
   const handleAiFill = async () => {
     try {
@@ -35,9 +64,8 @@ export function FlowsPage() {
         });
         message.success(r.reasoning || 'AI 已补全字段');
       }
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('AI 填充失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 填充失败：');
     } finally {
       setAiFilling(false);
     }
@@ -48,8 +76,8 @@ export function FlowsPage() {
     try {
       const data = await flowApi.list();
       setFlows(data);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
@@ -82,9 +110,8 @@ export function FlowsPage() {
         message.success('流程已创建，开始编排节点');
         navigate(`/flows/${created.id}`);
       }
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('操作失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '操作失败：');
     }
   };
 
@@ -98,8 +125,8 @@ export function FlowsPage() {
           await flowApi.delete(flow.id);
           message.success('已删除');
           load();
-        } catch (e: any) {
-          message.error('删除失败：' + e.message);
+        } catch (e) {
+          notifyApiError(e, '删除失败：');
         }
       },
     });
@@ -108,11 +135,46 @@ export function FlowsPage() {
   return (
     <div>
       <Card style={{ marginBottom: 12 }} styles={{ body: { padding: 12 } }}>
-        <Space>
+        <Space wrap>
           <span style={{ fontSize: 16, fontWeight: 500 }}>
             <PartitionOutlined /> 节点流管理
           </span>
           <span style={{ color: '#999' }}>为每类工作项定义生命周期与流转规则</span>
+          <Input.Search
+            placeholder="搜索名称/描述" allowClear
+            style={{ width: 200 }}
+            value={q} onChange={e => setQ(e.target.value)}
+          />
+          <Select
+            placeholder="类型" allowClear
+            value={typeFilter} onChange={setTypeFilter}
+            style={{ width: 120 }}
+            options={Object.entries(TYPE_LABEL).map(([k, v]) => ({ value: k, label: v }))}
+          />
+          <Select
+            placeholder="状态" allowClear
+            value={activeFilter} onChange={setActiveFilter}
+            style={{ width: 110 }}
+            options={[
+              { value: 'active', label: '已激活' },
+              { value: 'inactive', label: '未激活' },
+            ]}
+          />
+          {/* V1.52: 已保存筛选 + 团队共享 */}
+          <SavedFilterButton
+            currentFilters={currentFilters}
+            applyFilters={(f) => {
+              setQ(f.q || '');
+              setTypeFilter(f.type || undefined);
+              setActiveFilter(f.active || undefined);
+            }}
+            savedFilters={savedFilters}
+            onSave={(name, shared) => saveFilter(name, shared)}
+            onDelete={(id) => deleteFilter(id)}
+            onShare={(id, shared) => shareFilter(id, shared)}
+            cloudError={cloudError}
+          />
+          <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
             新建节点流
           </Button>
@@ -122,7 +184,7 @@ export function FlowsPage() {
       <Card>
         <Table
           rowKey="id"
-          dataSource={flows}
+          dataSource={filteredFlows}
           loading={loading}
           pagination={false}
           columns={[

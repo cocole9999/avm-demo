@@ -74,3 +74,91 @@
 }
 
 .avm-markdown strong { font-weight: 600; }
+
+/* V1.50: 工作项编号自动链接 */
+.avm-wi-link {
+  color: #1677ff;
+  text-decoration: none;
+  border-bottom: 1px dashed #91caff;
+  padding: 0 1px;
+  border-radius: 2px;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.avm-wi-link:hover {
+  color: #0958d9;
+  background: #e6f4ff;
+  border-bottom-color: #1677ff;
+  text-decoration: none;
+}
+
+.avm-wi-link:active {
+  color: #003eb3;
+  background: #bae0ff;
+}
+
+/* ========== V1.50: 暗色主题 ========== */
+html[data-theme='dark'] {
+  --avm-bg: #141414;
+  --avm-bg-elevated: #1f1f1f;
+  --avm-bg-container: #1f1f1f;
+  --avm-bg-secondary: #262626;
+  --avm-border: #303030;
+  --avm-border-secondary: #262626;
+  --avm-text: #e6e6e6;
+  --avm-text-secondary: #a6a6a6;
+  --avm-text-tertiary: #8c8c8c;
+  --avm-primary: #1677ff;
+  --avm-link: #4096ff;
+  --avm-link-hover: #69b1ff;
+  --avm-code-bg: rgba(255, 255, 255, 0.08);
+  --avm-blockquote-border: #404040;
+  --avm-muted: #595959;
+  color-scheme: dark;
+}
+
+html[data-theme='dark'] body {
+  background: var(--avm-bg);
+  color: var(--avm-text);
+}
+
+/* 暗色主题下的工作项链接 */
+html[data-theme='dark'] .avm-wi-link {
+  color: #69b1ff;
+  border-bottom-color: #1d39c4;
+}
+
+html[data-theme='dark'] .avm-wi-link:hover {
+  color: #91caff;
+  background: rgba(22, 119, 255, 0.16);
+  border-bottom-color: #4096ff;
+}
+
+html[data-theme='dark'] .avm-wi-link:active {
+  color: #bae0ff;
+  background: rgba(22, 119, 255, 0.28);
+}
+
+/* 暗色主题下的 Markdown 样式微调 */
+html[data-theme='dark'] .avm-markdown code {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme='dark'] .avm-markdown pre {
+  background: #0d1117;
+}
+
+html[data-theme='dark'] .avm-markdown th {
+  background: #262626;
+}
+
+html[data-theme='dark'] .avm-markdown blockquote {
+  border-left-color: #404040;
+  color: #a6a6a6;
+}
+
+html[data-theme='dark'] .avm-markdown th,
+html[data-theme='dark'] .avm-markdown td {
+  border-color: #303030;
+}

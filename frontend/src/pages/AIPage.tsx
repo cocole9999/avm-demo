@@ -5,12 +5,13 @@ import {
 } from 'antd';
 import {
   RobotOutlined, SendOutlined, UserOutlined, BulbOutlined, FireOutlined, FileTextOutlined,
-  MedicineBoxOutlined, FlagOutlined, SettingOutlined, ExperimentOutlined, ReloadOutlined,
+  MedicineBoxOutlined, FlagOutlined, SettingOutlined, ReloadOutlined, PlusOutlined,
 } from '@ant-design/icons';
 import { aiApi, llmSettingsApi, metaApi } from '../api';
 import type { AIFieldConfig } from '../types';
 import { Link } from 'react-router-dom';
 import { MarkdownContent } from '../components/MarkdownContent';
+import { notifyApiError } from '../utils/apiError';
 
 interface ChatMessage {
   role: 'user' | 'ai';
@@ -46,8 +47,8 @@ export function AIPage() {
     try {
       const r = await aiApi.refreshWiki();
       message.success(`Wiki 快照已刷新（${r.pageCount} 页 / ${r.chars} 字符）`);
-    } catch (e: any) {
-      message.error('刷新失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '刷新失败：');
     } finally {
       setRefreshingWiki(false);
     }
@@ -97,8 +98,8 @@ export function AIPage() {
         llmModel: r.llmModel,
         time: new Date().toLocaleString('zh-CN'),
       }]);
-    } catch (e: any) {
-      message.error('查询失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '查询失败：');
     } finally {
       setLoading(false);
     }
@@ -297,8 +298,8 @@ function EstimateTool() {
     try {
       const r = await aiApi.suggestEstimate(v);
       setResult(r);
-    } catch (e: any) {
-      message.error('AI 失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 失败：');
     } finally {
       setLoading(false);
     }
@@ -374,8 +375,8 @@ function ClassifyTool() {
     try {
       const r = await aiApi.classifyBug(v);
       setResult(r);
-    } catch (e: any) {
-      message.error('AI 失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 失败：');
     } finally {
       setLoading(false);
     }
@@ -434,8 +435,8 @@ function WeeklyReportTool() {
     setLoading(true);
     try {
       setReport(await aiApi.weeklyReport({ user: '我' }));
-    } catch (e: any) {
-      message.error('生成失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '生成失败：');
     } finally {
       setLoading(false);
     }
@@ -560,7 +561,7 @@ function ConfigsTab() {
   );
 }
 
-// 模型切换器：下拉 + 自定义输入
+// 模型切换器：显示当前厂商已配置的所有模型，支持切换；底部"添加模型"按钮跳转 LLM 设置页
 function ModelSwitcher({ provider, models, current, onChanged }: {
   provider: string;
   models: { builtin: string[]; custom: string[]; all: string[] };
@@ -568,7 +569,6 @@ function ModelSwitcher({ provider, models, current, onChanged }: {
   onChanged: (status: any) => void;
 }) {
   const [switching, setSwitching] = useState(false);
-  const all = models.all || [];
 
   const switchTo = async (m: string) => {
     if (!m || m === current) return;
@@ -576,50 +576,33 @@ function ModelSwitcher({ provider, models, current, onChanged }: {
     try {
       const r = await llmSettingsApi.switchModel(provider, m);
       message.success(`已切换到 ${m}`);
-      // 用后端响应里的 status 立即更新（避免再调 llmStatus 命中 cache）
       if (r.status) onChanged(r.status);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
     finally { setSwitching(false); }
   };
 
-  const addAndSwitch = async (m: string) => {
-    if (!m) return;
-    setSwitching(true);
-    try {
-      await llmSettingsApi.addCustomModel(provider, m);
-      const r = await llmSettingsApi.switchModel(provider, m);
-      message.success(`已添加并切换到 ${m}`);
-      if (r.status) onChanged(r.status);
-    } catch (e: any) { message.error(e.message); }
-    finally { setSwitching(false); }
-  };
+  // 当前厂商已配置的所有模型（builtin + custom）
+  const allModels = Array.from(new Set([
+    ...(models.builtin || []),
+    ...(models.custom || []),
+  ]));
 
   return (
     <Space.Compact>
       <Select
         size="small"
-        style={{ minWidth: 200 }}
+        style={{ minWidth: 180 }}
         value={current}
         loading={switching}
         onChange={switchTo}
-        showSearch
-        placeholder="切换模型"
-        optionFilterProp="label"
-        options={[
-          ...(models.builtin || []).map(m => ({ value: m, label: `${m}${m === current ? ' ★' : ''}` })),
-          ...(models.custom || []).map(m => ({ value: m, label: `${m}${m === current ? ' ★' : ''}` })),
-        ]}
+        placeholder="选择模型"
+        options={allModels.map(m => ({ value: m, label: `${m}${m === current ? ' ★' : ''}` }))}
       />
-      <Tooltip title="使用自定义模型名">
-        <Button
-          size="small"
-          icon={<ExperimentOutlined />}
-          onClick={() => {
-            const m = window.prompt('输入自定义模型名（立即添加并切换）：');
-            if (m) addAndSwitch(m.trim());
-          }}
-        />
-      </Tooltip>
+      <Link to="/llm-settings">
+        <Tooltip title="添加其他厂商模型">
+          <Button size="small" type="primary" ghost icon={<PlusOutlined />} />
+        </Tooltip>
+      </Link>
     </Space.Compact>
   );
 }
@@ -646,7 +629,7 @@ function ProviderSwitcher({ current, providers, activeProviders, onChanged }: {
       const r = await llmSettingsApi.activateProvider(key);
       message.success(`已切换到 ${r.displayName}（${r.model}）`);
       if (r.status) onChanged(r.status);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
     finally { setSwitching(false); }
   };
 

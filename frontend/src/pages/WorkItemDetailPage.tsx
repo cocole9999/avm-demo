@@ -3,22 +3,27 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Card, Descriptions, Tag, Avatar, Space, Button, Select, Input, DatePicker, Checkbox,
   Tabs, message, Modal, Empty, Timeline, Tooltip, Form, Spin, Progress, Divider, Upload,
-  Row, Col, Statistic, Alert, App, Drawer,
+  Row, Col, Statistic, Alert, App, Drawer, Popover, Badge,
 } from 'antd';
 import {
   ArrowLeftOutlined, EditOutlined, SaveOutlined, CloseOutlined, PlusOutlined,
   DeleteOutlined, UserOutlined, LinkOutlined, CommentOutlined, HistoryOutlined, CopyOutlined,
   FlagOutlined, FieldTimeOutlined, BranchesOutlined, RobotOutlined, FireOutlined,
   ProjectOutlined, BankOutlined, CarOutlined, ToolOutlined, CheckCircleOutlined, ClockCircleOutlined, WarningOutlined, AuditOutlined, ReloadOutlined, PictureOutlined, UploadOutlined,
-  ThunderboltOutlined,
+  ThunderboltOutlined, SmileOutlined, StarOutlined, StarFilled, EyeOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { workItemApi, commentApi, activityApi, metaApi, aiApi, flowApi, dependencyApi, mentionApi, auditApi, uploadApi } from '../api';
+import { workItemApi, commentApi, activityApi, metaApi, aiApi, flowApi, dependencyApi, mentionApi, auditApi, uploadApi, watchApi } from '../api';
 import type { WorkItem, WorkItemType, MetaOptions, Activity } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { WorkloadTrend } from '../components/WorkloadTrend';
 import { DependencyGraph } from '../components/DependencyGraph';
+import { useDragPasteUpload } from '../hooks/useDragPasteUpload';
+import { AppBreadcrumb } from '../components/AppBreadcrumb';
+import { CommentSummaryCard } from '../components/CommentSummaryCard';
 import { useWorkItemChanged } from '../services/useWorkItemChanged';
+import { notifyApiError } from '../utils/apiError';
+import { workItemLinkPath } from '../utils/workItemLinker';
 
 export function WorkItemDetailPage() {
   const { id, type } = useParams<{ id: string; type: WorkItemType }>();
@@ -29,6 +34,7 @@ export function WorkItemDetailPage() {
   const [options, setOptions] = useState<MetaOptions | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [mentionOpts, setMentionOpts] = useState<Array<{ value: string; label: any; data: any }>>([]);
   // V1.21: AI 拆解状态
@@ -45,12 +51,55 @@ export function WorkItemDetailPage() {
       setItem(data);
       const acts = await activityApi.list(id);
       setActivities(acts);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+      // V1.50: 加载关注状态 + 关注者数（静默失败不影响主流程）
+      try {
+        const [watchers, myWatching] = await Promise.all([
+          watchApi.listWatchers(id),
+          watchApi.myWatching(),
+        ]);
+        setWatcherCount(watchers.length);
+        const me = (() => {
+          try {
+            const raw = localStorage.getItem('avm-auth');
+            if (raw) {
+              const p = JSON.parse(raw);
+              if (p?.user?.id) return p.user.id;
+              if (p?.user?.username) return p.user.username;
+            }
+          } catch { /* ignore */ }
+          return '我';
+        })();
+        setIsWatching(myWatching.some(w => w.workItemId === id || w.userId === me));
+      } catch { /* ignore */ }
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
   }, [id]);
+
+  // V1.50: 切换关注
+  const handleToggleWatch = async () => {
+    if (!id) return;
+    setWatchLoading(true);
+    try {
+      if (isWatching) {
+        await watchApi.unwatch(id);
+        setIsWatching(false);
+        setWatcherCount(c => Math.max(0, c - 1));
+        message.success('已取消关注');
+      } else {
+        await watchApi.watch(id);
+        setIsWatching(true);
+        setWatcherCount(c => c + 1);
+        message.success('已关注，状态/评论变更时会通知你');
+      }
+    } catch (e) {
+      notifyApiError(e, '操作失败：');
+    } finally {
+      setWatchLoading(false);
+    }
+  };
 
   // V1.47: form.setFieldsValue 移到 useEffect, 确保 Form 已渲染后再设值
   useEffect(() => {
@@ -80,6 +129,8 @@ export function WorkItemDetailPage() {
   useWorkItemChanged(() => { load(); }, { id: id });
 
   const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       const values = await form.validateFields();
       await workItemApi.update(id!, {
@@ -100,24 +151,45 @@ export function WorkItemDetailPage() {
       message.success('保存成功');
       setEditing(false);
       load();
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('保存失败：' + (e.message || ''));
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
+    } finally {
+      setSaving(false);
     }
   };
 
   // V1.23: 评论图片附件
   const [commentImage, setCommentImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  // V1.52: 拖拽/粘贴上传 hook（统一处理拖拽+粘贴+选择，替代 V1.50 散落的 handlers）
+  const {
+    isDragOver,
+    dragHandlers: commentDragHandlers,
+    pasteHandler: commentPasteHandler,
+  } = useDragPasteUpload({
+    mode: 'image-only',
+    maxImageSize: 10 * 1024 * 1024,
+    onError: (msg) => message.error(msg),
+    onFiles: async (files) => {
+      // 评论场景只取第一张（一次评论一张图）
+      const f = files[0];
+      if (f) await handleImageUpload(f);
+    },
+  });
+  // V1.50: 关注状态
+  const [isWatching, setIsWatching] = useState(false);
+  const [watcherCount, setWatcherCount] = useState(0);
+  const [watchLoading, setWatchLoading] = useState(false);
 
   const handleImageUpload = async (file: File) => {
+    // V1.52: hook 已做大小/类型校验，这里直接上传
     setUploadingImage(true);
     try {
       const r = await uploadApi.upload(file);
       setCommentImage(r.url);
       message.success(`图片已上传 (${(r.size / 1024).toFixed(1)} KB)`);
-    } catch (e: any) {
-      message.error('上传失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '上传失败：');
     } finally {
       setUploadingImage(false);
     }
@@ -157,21 +229,39 @@ export function WorkItemDetailPage() {
     } catch { setMentionOpts([]); }
   };
 
-  // 渲染评论内容: 高亮 @提及
+  // 渲染评论内容: 高亮 @提及 + 自动链接工作项编号（V1.50）
   const renderCommentContent = (content: string) => {
     if (!content) return null;
     const parts: any[] = [];
-    const re = /@["']?([\u4e00-\u9fa5\w\s（）()\.\-]+?)["']?(?=\s|$|[,，。.!？?；;:\n])/g;
+    // V1.50: 合并两个正则 — @mention 和 work-item key
+    const combinedRe = new RegExp(
+      '(?:@["\']?[\\u4e00-\\u9fa5\\w\\s（）()\\.\\-]+?["\']?(?=\\s|$|[,，。.!？?；;:\n]))' +
+      '|(?:\\b(?:REQ|TASK|BUG|REL)-\\d+\\b)',
+      'g',
+    );
     let last = 0;
     let m;
-    while ((m = re.exec(content)) !== null) {
+    while ((m = combinedRe.exec(content)) !== null) {
       if (m.index > last) {
         parts.push(content.slice(last, m.index));
       }
-      parts.push(
-        <Tag key={`m-${m.index}`} color="blue" style={{ margin: 0, padding: '0 6px' }}>{m[0]}</Tag>
-      );
-      last = m.index + m[0].length;
+      const matched = m[0];
+      if (matched.startsWith('@')) {
+        parts.push(
+          <Tag key={`m-${m.index}`} color="blue" style={{ margin: 0, padding: '0 6px' }}>{matched}</Tag>
+        );
+      } else {
+        // V1.50: 工作项 key → 链接
+        const path = workItemLinkPath(matched);
+        if (path) {
+          parts.push(
+            <Link key={`wi-${m.index}`} to={path} style={{ color: '#1677ff', fontWeight: 500, borderBottom: '1px dashed #91caff', padding: '0 1px' }}>{matched}</Link>
+          );
+        } else {
+          parts.push(matched);
+        }
+      }
+      last = m.index + matched.length;
     }
     if (last < content.length) parts.push(content.slice(last));
     return <span style={{ whiteSpace: 'pre-wrap' }}>{parts}</span>;
@@ -194,8 +284,8 @@ export function WorkItemDetailPage() {
       });
       message.success(`已复制为 ${newItem.key}: ${newItem.title}`);
       navigate(`/work-items/${newItem.type}/${newItem.id}`);
-    } catch (e: any) {
-      message.error('复制失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '复制失败：');
     }
   };
 
@@ -237,8 +327,8 @@ export function WorkItemDetailPage() {
         );
       } catch { /* 静默 */ }
       load();
-    } catch (e: any) {
-      message.error('更新失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '更新失败：');
     }
   };
 
@@ -248,8 +338,8 @@ export function WorkItemDetailPage() {
       await flowApi.transition(id!, toNodeId, '我');
       message.success(`已流转到「${nodeName}」`);
       load();
-    } catch (e: any) {
-      message.error('流转失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '流转失败：');
     }
   };
 
@@ -277,8 +367,8 @@ export function WorkItemDetailPage() {
           load();
         },
       });
-    } catch (e: any) {
-      message.error('AI 估分失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 估分失败：');
     }
   };
 
@@ -294,10 +384,10 @@ export function WorkItemDetailPage() {
       setDecomposeProgress('');
       setDecomposeData(r);
       setDecomposeSelected(r.subtasks.map((_: any, i: number) => i));  // 默认全选
-    } catch (e: any) {
+    } catch (e) {
       setDecomposing(false);
       setDecomposeProgress('');
-      message.error('AI 拆解失败: ' + (e.message || '未知错误'));
+      notifyApiError(e, 'AI 拆解失败：');
     }
   };
 
@@ -330,8 +420,8 @@ export function WorkItemDetailPage() {
           </div>
         ),
       });
-    } catch (e: any) {
-      message.error('AI 风险评估失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 风险评估失败：');
     }
   };
 
@@ -359,8 +449,8 @@ export function WorkItemDetailPage() {
       await workItemApi.addRelation(id!, target.id, '关联');
       message.success('已添加关联');
       load();
-    } catch (e: any) {
-      message.error('添加失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '添加失败：');
     }
   };
 
@@ -379,6 +469,14 @@ export function WorkItemDetailPage() {
 
   return (
     <div>
+      {/* V1.48: 面包屑导航（工作台 / 工作项 / 类型 / 编号） */}
+      <AppBreadcrumb
+        items={[
+          { label: '工作台', path: '/workbench' },
+          { label: `${TYPE_LABEL[item.type] || '工作项'}管理`, path: `/work-items/${item.type}` },
+        ]}
+        extra={[{ label: `${item.key} ${item.title}` }]}
+      />
       <Card style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
           <Space wrap>
@@ -428,10 +526,22 @@ export function WorkItemDetailPage() {
             {editing ? (
               <>
                 <Button icon={<CloseOutlined />} onClick={() => { setEditing(false); load(); }}>取消</Button>
-                <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>保存</Button>
+                <Button type="primary" icon={<SaveOutlined />} onClick={handleSave} loading={saving}>保存</Button>
               </>
             ) : (
               <>
+                {/* V1.50: 关注按钮 */}
+                <Tooltip title={isWatching ? '已关注：状态/评论变更时会通知我' : '关注后获得状态/评论变更通知'}>
+                  <Button
+                    icon={isWatching ? <StarFilled /> : <StarOutlined />}
+                    onClick={handleToggleWatch}
+                    loading={watchLoading}
+                    type={isWatching ? 'primary' : 'default'}
+                  >
+                    {isWatching ? '已关注' : '关注'}
+                    {watcherCount > 0 && <Badge count={watcherCount} size="small" style={{ marginLeft: 4, background: isWatching ? '#1677ff' : '#999' }} />}
+                  </Button>
+                </Tooltip>
                 {(item.type === 'requirement' || item.type === 'task') && (
                   <Button icon={<RobotOutlined />} onClick={handleAIEstimate}>AI 估分</Button>
                 )}
@@ -687,10 +797,32 @@ export function WorkItemDetailPage() {
             label: <span><CommentOutlined /> 评论 ({item.comments?.length || 0})</span>,
             children: (
               <Card>
+                {/* V1.50: AI 评论摘要卡片（评论 >= 3 条才显示） */}
+                <CommentSummaryCard workItemId={item.id} commentCount={item.comments?.length || 0} />
                 <div style={{ marginBottom: 16 }}>
+                  {/* V1.52: 拖拽/粘贴上传 — 使用 useDragPasteUpload hook */}
+                  <div
+                    {...commentDragHandlers}
+                    style={{
+                      position: 'relative',
+                      border: isDragOver ? '2px dashed #1677ff' : '2px dashed transparent',
+                      borderRadius: 6,
+                      transition: 'border-color 0.2s',
+                      background: isDragOver ? '#e6f4ff' : 'transparent',
+                    }}
+                  >
+                    {isDragOver && (
+                      <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        pointerEvents: 'none', zIndex: 10, color: '#1677ff', fontSize: 14, fontWeight: 500,
+                      }}>
+                        📥 松手即可上传图片
+                      </div>
+                    )}
                   <Input.TextArea
                     rows={3}
-                    placeholder="发表评论，输入 @ 触发成员联想... 可粘贴/上传图片 (V1.23)"
+                    placeholder="发表评论，输入 @ 触发成员联想... 可拖拽/粘贴/上传图片 (V1.52)"
                     value={commentText}
                     onChange={e => {
                       const v = e.target.value;
@@ -707,22 +839,13 @@ export function WorkItemDetailPage() {
                         }
                       }
                     }}
-                    onPaste={async (e) => {
-                      // V1.23: 粘贴图片自动上传
-                      const items = e.clipboardData?.items;
-                      if (!items) return;
-                      for (const it of Array.from(items)) {
-                        if (it.kind === 'file' && it.type.startsWith('image/')) {
-                          const f = it.getAsFile();
-                          if (f) {
-                            e.preventDefault();
-                            await handleImageUpload(f);
-                            return;
-                          }
-                        }
-                      }
-                    }}
+                    {...commentPasteHandler}
                   />
+                  </div>
+                  {/* V1.50: 拖拽提示徽章（输入框下方，固定显示） */}
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#999' }}>
+                    💡 拖拽图片到上方输入框 / 直接粘贴 / 点击"上传图片"按钮均可
+                  </div>
 
                   {/* V1.23: 图片附件预览 */}
                   {commentImage && (
@@ -1203,15 +1326,30 @@ function MarkdownView({ content }: { content: string }) {
 }
 
 function renderInline(text: string) {
-  // 简化：**bold**
+  // V1.50: 同时支持 **bold** 与工作项 key 链接
+  // 组合正则 — **bold** 或 工作项 key
+  const combinedRe = /\*\*([^*]+)\*\*|\b(REQ|TASK|BUG|REL)-\d+\b/g;
   const parts: any[] = [];
-  const regex = /\*\*([^*]+)\*\*/g;
   let lastIndex = 0;
   let match;
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = combinedRe.exec(text)) !== null) {
     if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
-    parts.push(<b key={parts.length}>{match[1]}</b>);
-    lastIndex = regex.lastIndex;
+    if (match[1] !== undefined) {
+      // **bold**
+      parts.push(<b key={parts.length}>{match[1]}</b>);
+    } else {
+      // V1.50: 工作项 key → 链接
+      const key = match[0];
+      const path = workItemLinkPath(key);
+      if (path) {
+        parts.push(
+          <Link key={parts.length} to={path} style={{ color: '#1677ff', fontWeight: 500, borderBottom: '1px dashed #91caff', padding: '0 1px' }}>{key}</Link>
+        );
+      } else {
+        parts.push(key);
+      }
+    }
+    lastIndex = combinedRe.lastIndex;
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex));
   return parts;
@@ -1266,9 +1404,8 @@ function DependencyTab({ workItemId }: { workItemId: string }) {
       message.success('已添加');
       setDrawerOpen(false);
       load();
-    } catch (e: any) {
-      if (e?.errorFields) return;
-      message.error('保存失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 
@@ -1368,21 +1505,55 @@ function DependencyTab({ workItemId }: { workItemId: string }) {
   );
 }
 
-// V1.28: 评论 reactions 行
-const REACTION_EMOJIS = ['👍', '❤️', '🎉', '🚀', '✅', '😄', '🤔', '👀'];
+// V1.28: 评论 reactions 行 — V1.50 用 Popover 替代 prompt
+const REACTION_EMOJIS = ['👍', '❤️', '🎉', '🚀', '✅', '😄', '🤔', '👀', '🔥', '💡', '⚠️', '😂'];
 function CommentReactions({ comment, currentUser, onChange }: { comment: any; currentUser: string; onChange: () => void }) {
   const { message } = App.useApp();
+  const [pickerOpen, setPickerOpen] = useState(false);
   let reactions: Record<string, string[]> = {};
   try { reactions = JSON.parse(comment.reactions || '{}'); } catch { reactions = {}; }
   const handleReact = async (emoji: string) => {
     try {
       await commentApi.react(comment.id, emoji, currentUser);
       onChange();
-    } catch (e: any) {
-      message.error('操作失败: ' + e.message);
+      setPickerOpen(false);
+    } catch (e) {
+      notifyApiError(e, '操作失败：');
     }
   };
   const hasAny = Object.keys(reactions).length > 0;
+
+  // V1.50: emoji 选择器面板内容
+  const pickerContent = (
+    <div style={{ width: 220 }}>
+      <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>选择表情反应</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4 }}>
+        {REACTION_EMOJIS.map(emoji => {
+          const users = reactions[emoji] || [];
+          const reacted = users.includes(currentUser);
+          return (
+            <Tooltip key={emoji} title={reacted ? `已反应（${users.length}）` : `点击反应（${users.length}）`} mouseEnterDelay={0.2}>
+              <Button
+                type={reacted ? 'primary' : 'text'}
+                size="small"
+                onClick={() => handleReact(emoji)}
+                style={{
+                  fontSize: 20,
+                  height: 32,
+                  padding: 0,
+                  background: reacted ? '#e6f4ff' : 'transparent',
+                }}
+              >
+                {emoji}
+                {users.length > 0 && <span style={{ fontSize: 10, marginLeft: 2 }}>{users.length}</span>}
+              </Button>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
       {REACTION_EMOJIS.map(emoji => {
@@ -1415,19 +1586,24 @@ function CommentReactions({ comment, currentUser, onChange }: { comment: any; cu
           </Tooltip>
         );
       })}
-      <Button
-        size="small"
-        type="text"
-        onClick={() => {
-          // 弹出 emoji 选择器: 简单起见用 prompt
-          const e = prompt(`选择 emoji (${REACTION_EMOJIS.join(' ')}):`, '👍');
-          if (e && REACTION_EMOJIS.includes(e)) handleReact(e);
-          else if (e) message.warning('不支持该 emoji');
-        }}
-        style={{ fontSize: 11, color: '#999' }}
+      {/* V1.50: 用 Popover 替代 prompt，9 个常用 emoji 一键选择 */}
+      <Popover
+        content={pickerContent}
+        trigger="click"
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        placement="topLeft"
+        destroyOnHidden
       >
-        {hasAny ? '+ 更多' : '+ 反应'}
-      </Button>
+        <Button
+          size="small"
+          type="text"
+          icon={<SmileOutlined />}
+          style={{ fontSize: 11, color: '#999' }}
+        >
+          {hasAny ? '+ 更多' : '+ 反应'}
+        </Button>
+      </Popover>
     </div>
   );
 }

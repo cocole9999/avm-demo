@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as ai from '../services/aiEngine';
 import { prisma } from '../db';
 import { getLLMProvider } from '../services/llmProvider';
+import { requireRole } from '../middleware/auth';
 
 export const aiRouter = Router();
 
@@ -72,30 +73,56 @@ aiRouter.get('/weekly-report', async (req, res) => {
 });
 
 // AI 字段配置
+// P0-4 安全修复：
+//   ① 写操作（POST/PATCH/DELETE）需 space_admin 权限
+//   ② POST/PATCH 加字段白名单，防止批量赋值（避免改写 tenantId/spaceId 等敏感字段）
 aiRouter.get('/configs', async (_req, res) => {
   const list = await prisma.aIFieldConfig.findMany({ orderBy: { name: 'asc' } });
   res.json(list);
 });
 
-aiRouter.post('/configs', async (req, res) => {
+aiRouter.post('/configs', requireRole('space_admin'), async (req, res) => {
   try {
-    const c = await prisma.aIFieldConfig.create({ data: req.body });
+    const { name, workType, targetField, capability, prompt, inputFields, enabled } = req.body;
+    if (!name || !workType || !targetField) {
+      return res.status(400).json({ error: 'name, workType, targetField required' });
+    }
+    const c = await prisma.aIFieldConfig.create({
+      data: {
+        name,
+        workType,
+        targetField,
+        capability: capability || '',
+        prompt: prompt || '',
+        inputFields: inputFields || '',
+        enabled: enabled !== false,
+      },
+    });
     res.status(201).json(c);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
 });
 
-aiRouter.patch('/configs/:id', async (req, res) => {
+aiRouter.patch('/configs/:id', requireRole('space_admin'), async (req, res) => {
   try {
-    const c = await prisma.aIFieldConfig.update({ where: { id: req.params.id }, data: req.body });
+    const { name, workType, targetField, capability, prompt, inputFields, enabled } = req.body;
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (workType !== undefined) data.workType = workType;
+    if (targetField !== undefined) data.targetField = targetField;
+    if (capability !== undefined) data.capability = capability;
+    if (prompt !== undefined) data.prompt = prompt;
+    if (inputFields !== undefined) data.inputFields = inputFields;
+    if (enabled !== undefined) data.enabled = enabled;
+    const c = await prisma.aIFieldConfig.update({ where: { id: req.params.id }, data });
     res.json(c);
   } catch (e: any) {
     res.status(400).json({ error: e.message });
   }
 });
 
-aiRouter.delete('/configs/:id', async (req, res) => {
+aiRouter.delete('/configs/:id', requireRole('space_admin'), async (req, res) => {
   await prisma.aIFieldConfig.delete({ where: { id: req.params.id } });
   res.status(204).end();
 });

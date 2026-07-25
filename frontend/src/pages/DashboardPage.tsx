@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Card, Row, Col, Statistic, Progress, Tag, List, Avatar, Empty, Button, Modal, Skeleton, Space, App, message, Tooltip } from 'antd';
 import {
-  CheckCircleOutlined, ClockCircleOutlined, FireOutlined, BugOutlined,
-  ProjectOutlined, RiseOutlined, FileTextOutlined, CopyOutlined, HistoryOutlined, EyeOutlined,
+  FireOutlined, ProjectOutlined, CheckCircleOutlined, ThunderboltOutlined, FileTextOutlined, ClockCircleOutlined, FileDoneOutlined, RiseOutlined,
+  BugOutlined, HistoryOutlined, EyeOutlined, CopyOutlined,
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -11,6 +11,7 @@ import type { WorkItem, Iteration } from '../types';
 import { PRIORITY_COLOR, STATUS_COLOR, TYPE_COLOR, TYPE_LABEL } from '../types';
 import { WorkloadByUser } from '../components/WorkloadByUser';
 import { MarkdownContent } from '../components/MarkdownContent';
+import { RiskAlertPanel } from '../components/RiskAlertPanel';
 
 const REPORT_TYPE_LABEL: Record<string, string> = {
   week: '周报', month: '月报', quarter: '季报', custom: '自定义',
@@ -90,6 +91,10 @@ export function DashboardPage() {
 
   return (
     <div>
+      {/* V1.49: AI 风险预警面板（紧凑模式） */}
+      <div style={{ marginBottom: 16 }}>
+        <RiskAlertPanel variant="compact" />
+      </div>
       <Row gutter={[16, 16]}>
         <Col span={6}>
           <Card>

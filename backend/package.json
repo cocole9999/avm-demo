@@ -1,7 +1,7 @@
 {
   "name": "avm-backend",
-  "version": "1.30.2",
-  "description": "AVM Project Center - Backend (V1.30.2: P3 消除隐患 + 工程化)",
+  "version": "1.46.0",
+  "description": "AVM Project Center - Backend (V1.46: 商用加固 - 监控/测试/工程化)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -25,6 +25,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "gen:swagger": "node scripts/gen-swagger.mjs",
     "prepare": "husky install",
     "postinstall": "prisma generate"
   },
@@ -32,6 +33,7 @@
     "@prisma/client": "^5.22.0",
     "@sentry/node": "^10.67.0",
     "@types/multer": "^2.2.0",
+    "@types/swagger-ui-express": "^4.1.8",
     "@types/ws": "^8.18.1",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -42,6 +44,8 @@
     "morgan": "^1.10.0",
     "multer": "^2.2.0",
     "pdf-parse": "^2.4.5",
+    "swagger-autogen": "^2.23.7",
+    "swagger-ui-express": "^5.0.1",
     "winston": "^3.17.0",
     "ws": "^8.21.1",
     "xlsx": "^0.18.5",

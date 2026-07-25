@@ -19,6 +19,9 @@ import {
 } from '@ant-design/icons';
 import { projectApi, customerApi, carModelApi, aiApi, type Project, type Customer, type CarModel } from '../api';
 import { downloadBlob, getFilenameFromResponse } from '../utils/download';
+import { notifyApiError } from '../utils/apiError';
+import { useSavedFilters } from '../hooks/useSavedFilters';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 import dayjs from 'dayjs';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -57,8 +60,8 @@ export function ProjectPage() {
       const blob = await aiApi.exportProjects({ format });
       const filename = getFilenameFromResponse((blob as any)?.headers, `projects-${new Date().toISOString().slice(0,10)}.${format}`);
       downloadBlob(blob as Blob, filename);
-    } catch (e: any) {
-      message.error('导出失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '导出失败：');
     } finally {
       setExporting(false);
     }
@@ -90,9 +93,8 @@ export function ProjectPage() {
         });
         message.success(r.reasoning || 'AI 已补全字段');
       }
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('AI 填充失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 填充失败：');
     } finally {
       setAiFilling(false);
     }
@@ -100,6 +102,17 @@ export function ProjectPage() {
   const [stats, setStats] = useState<any>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [carModels, setCarModels] = useState<CarModel[]>([]);
+
+  // V1.52: 已保存筛选（localStorage 缓存 + 云端共享）
+  const currentFilters = useMemo(() => ({
+    q,
+    status: statusFilter || '',
+    billingType: billingFilter || '',
+    risk: riskFilter || '',
+    customerId: customerFilter || '',
+  }), [q, statusFilter, billingFilter, riskFilter, customerFilter]);
+  const { savedFilters, saveFilter, deleteFilter, shareFilter, cloudError } =
+    useSavedFilters('project-list', currentFilters, { cloudSync: true });
 
   const load = async () => {
     setLoading(true);
@@ -161,8 +174,8 @@ export function ProjectPage() {
       await projectApi.remove(id);
       message.success('已删除');
       load();
-    } catch (e: any) {
-      message.error('删除失败：' + (e?.response?.data?.error || e.message));
+    } catch (e) {
+      notifyApiError(e, '删除失败：');
     }
   };
 
@@ -183,9 +196,8 @@ export function ProjectPage() {
       }
       setDrawerOpen(false);
       load();
-    } catch (e: any) {
-      if (e?.errorFields) return;
-      message.error('保存失败：' + (e?.response?.data?.error || e.message));
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 
@@ -409,6 +421,22 @@ export function ProjectPage() {
             ]}
           />
           <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
+          {/* V1.52: 已保存筛选 + 团队共享 */}
+          <SavedFilterButton
+            currentFilters={currentFilters}
+            applyFilters={(f) => {
+              setQ(f.q || '');
+              setStatusFilter(f.status || undefined);
+              setBillingFilter(f.billingType || undefined);
+              setRiskFilter(f.risk || undefined);
+              setCustomerFilter(f.customerId || undefined);
+            }}
+            savedFilters={savedFilters}
+            onSave={(name, shared) => saveFilter(name, shared)}
+            onDelete={(id) => deleteFilter(id)}
+            onShare={(id, shared) => shareFilter(id, shared)}
+            cloudError={cloudError}
+          />
           <Dropdown
             menu={{
               items: [

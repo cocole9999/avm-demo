@@ -9,16 +9,19 @@
  * - 多模态输入：文件内容读取/图片base64、语音实时转写、模型跨厂商选择
  */
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { FloatButton, Drawer, Input, Button, Space, Tag, Spin, message as antdMessage, Avatar, Empty, Tooltip, Popconfirm, Badge, Select, Divider } from 'antd';
 import {
   RobotOutlined, SendOutlined, CloseOutlined, ThunderboltOutlined, ClearOutlined, HistoryOutlined,
   AudioOutlined, AudioMutedOutlined, PictureOutlined, FileOutlined, PlusOutlined,
-  StopOutlined, CaretDownOutlined, DeleteOutlined, SettingOutlined, CheckOutlined, LockOutlined
+  StopOutlined, CaretDownOutlined, DeleteOutlined, SettingOutlined, CheckOutlined, EnvironmentOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../AuthContext';
 import { llmApi, llmSettingsApi } from '../api';
 import { MarkdownContent } from './MarkdownContent';
 import { SlashCommandMenu, type CommandResult } from './SlashCommandMenu';
+import { notifyApiError, extractApiError } from '../utils/apiError';
+import { useDragPasteUpload } from '../hooks/useDragPasteUpload';
 
 const { TextArea } = Input;
 
@@ -74,10 +77,33 @@ interface ProviderMeta {
 const API = '/api/ai-command';
 const STORAGE_KEY = (user: string) => `avm.ai.history.${user}`;
 const MAX_HISTORY = 30;
-const MAX_CONTEXT = 12;
+const MAX_CONTEXT = 20; // V1.50: 增大到 20 轮以支持更深的多轮上下文
 const MAX_TEXT_FILE_SIZE = 20 * 1024 * 1024; // 代码文件 20MB（对齐豆包）
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 图片 10MB
-const MAX_DOCUMENT_SIZE = 50 * 1024 * 1024; // 文档文件 50MB（对齐豆包）
+
+// V1.50: 路径 → 中文页面名（让 LLM 知道用户当前在哪个页面）
+function pageNameFromPath(path: string): string {
+  if (!path) return '首页';
+  if (path === '/' || path === '/dashboard') return '工作台首页';
+  if (path.startsWith('/work-items/')) {
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length >= 3) return `工作项详情 (${parts[1]})`;
+    return '工作项列表';
+  }
+  if (path.startsWith('/work-items')) return '工作项列表';
+  if (path.startsWith('/projects')) return '项目列表';
+  if (path.startsWith('/customers')) return '客户列表';
+  if (path.startsWith('/car-models')) return '车型列表';
+  if (path.startsWith('/reviews')) return '评审列表';
+  if (path.startsWith('/dashboards')) return '仪表盘';
+  if (path.startsWith('/flows')) return '流程';
+  if (path.startsWith('/reports')) return '报告中心';
+  if (path.startsWith('/notifications')) return '通知中心';
+  if (path.startsWith('/llm-settings')) return 'LLM 设置';
+  if (path.startsWith('/mcp')) return 'MCP 设置';
+  if (path.startsWith('/admin')) return '管理后台';
+  return path;
+}
 
 function genId() { return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 
@@ -190,8 +216,8 @@ function useSpeechRecognition(onInterim: (text: string) => void, onFinal: (text:
       recognitionRef.current = rec;
       rec.start();
       setListening(true);
-    } catch (err: any) {
-      antdMessage.error(`无法启动语音识别: ${err.message}`);
+    } catch (err) {
+      notifyApiError(err, '无法启动语音识别: ');
     }
   }, [isSupported, onInterim, onFinal]);
 
@@ -206,6 +232,9 @@ function useSpeechRecognition(onInterim: (text: string) => void, onFinal: (text:
 export function GlobalAIAssistant() {
   const { user } = useAuth();
   const username = user?.displayName || user?.username || 'guest';
+  const location = useLocation();
+  // V1.50: 当前页面路径（注入到 LLM context，让 LLM 知道用户在哪个页面）
+  const currentPath = location.pathname;
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = loadHistory(username);
@@ -232,9 +261,33 @@ export function GlobalAIAssistant() {
   const [slashQuery, setSlashQuery] = useState('');
   const [slashMenuPos, setSlashMenuPos] = useState({ top: 0, left: 0 });
 
-  // V1.45 拖拽上传状态
-  const [dragOver, setDragOver] = useState(false);
-  const dragCounter = useRef(0);
+  // V1.52: 拖拽/粘贴上传 hook（替代 V1.45 散落的 handlers）
+  const {
+    isDragOver: dragOver,
+    dragHandlers,
+    pasteHandler,
+  } = useDragPasteUpload({
+    mode: 'all',
+    maxImageSize: MAX_IMAGE_SIZE,
+    maxFileSize: 50 * 1024 * 1024,
+    onError: (msg) => antdMessage.error(msg),
+    onFiles: (files) => {
+      // 文档/代码文件走后端解析；图片直接前端读 dataURL
+      for (const f of files) {
+        if (isImageFile(f.name)) {
+          // 走 handleImages 流程
+          const dt = new DataTransfer();
+          dt.items.add(f);
+          handleImages(dt.files);
+        } else {
+          // 走 handleFiles 流程（含后端解析）
+          const dt = new DataTransfer();
+          dt.items.add(f);
+          handleFiles(dt.files);
+        }
+      }
+    },
+  });
 
   // 检测 / 触发命令菜单
   const handleInputChange = (val: string) => {
@@ -295,8 +348,9 @@ export function GlobalAIAssistant() {
       if (result.ok) {
         window.dispatchEvent(new CustomEvent('avm-data-changed'));
       }
-    } catch (e: any) {
-      setMessages(m => [...m, { id: genId(), role: 'ai', content: `❌ 命令执行失败: ${e.message}`, time: new Date().toLocaleTimeString('zh-CN') }]);
+    } catch (e) {
+      const errMsg = extractApiError(e) ?? '未知错误';
+      setMessages(m => [...m, { id: genId(), role: 'ai', content: `❌ 命令执行失败: ${errMsg}`, time: new Date().toLocaleTimeString('zh-CN') }]);
     } finally {
       setLoading(false);
     }
@@ -326,13 +380,16 @@ export function GlobalAIAssistant() {
       setAllProviders(providers);
       const activeKeys = new Set<string>((r?.activeProviders || []).map((p: any) => p.key));
       setActiveProviderKeys(activeKeys);
-      // 加载所有已配置厂商的模型列表（activeProviders 即为已配置的）
+      // V1.47: 加载每个已配置厂商的所有可用模型（builtin + custom）
       const modelMap: Record<string, string[]> = {};
       const configuredKeys = Array.from(activeKeys);
       await Promise.all(configuredKeys.map(async (pk) => {
         try {
           const m: any = await llmSettingsApi.listModels(pk);
-          modelMap[pk] = m?.builtinAll || m?.all || m?.builtin || providers.find(p => p.key === pk)?.models || [];
+          // 合并 builtin + custom 去重，呈现该厂商所有已配置模型
+          const builtin = m?.builtin || [];
+          const custom = m?.custom || [];
+          modelMap[pk] = Array.from(new Set([...builtin, ...custom]));
         } catch {
           modelMap[pk] = providers.find(p => p.key === pk)?.models || [];
         }
@@ -367,7 +424,7 @@ export function GlobalAIAssistant() {
       const r: any = await llmSettingsApi.quickSwitch(providerKey, model);
       antdMessage.success(`已切换到 ${model}`);
       await refreshLlm();
-    } catch (e: any) { antdMessage.error(e.message); }
+    } catch (e) { notifyApiError(e); }
     finally { setSwitchingModel(false); }
   };
 
@@ -436,56 +493,8 @@ export function GlobalAIAssistant() {
 
   const removeAttachment = (idx: number) => setAttachments(prev => prev.filter((_, i) => i !== idx));
 
-  // V1.45 拖拽上传处理
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current++;
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setDragOver(true);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current--;
-    if (dragCounter.current === 0) {
-      setDragOver(false);
-    }
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    dragCounter.current = 0;
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(e.dataTransfer.files);
-    }
-  }, []);
-
-  // V1.45 剪贴板粘贴图片
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          const name = `pasted_${Date.now()}.${item.type.split('/')[1] || 'png'}`;
-          const dt = new DataTransfer();
-          dt.items.add(new File([file], name, { type: item.type }));
-          handleImages(dt.files);
-        }
-      }
-    }
-  }, []);
+  // V1.52: 拖拽/粘贴 handler 已迁移到 useDragPasteUpload hook
+  // （原 V1.45 handleDragEnter/Leave/Over/Drop/handlePaste 已删除）
 
   // V1.45 Markdown 链接拦截：将命令链接转为执行命令
   const handleLinkClick = useCallback((href: string, text: string): boolean => {
@@ -520,10 +529,11 @@ export function GlobalAIAssistant() {
       att.content = parsed.content;
       att.loading = false;
       return att;
-    } catch (e: any) {
+    } catch (e) {
       att.loading = false;
-      att.content = `[上传失败: ${e.message}]`;
-      antdMessage.error(`文件上传失败: ${file.name} - ${e.message}`);
+      const errMsg = extractApiError(e) ?? '未知错误';
+      att.content = `[上传失败: ${errMsg}]`;
+      notifyApiError(e, `文件上传失败: ${file.name} - `);
       return att;
     }
   };
@@ -590,9 +600,12 @@ export function GlobalAIAssistant() {
       name: a.name, type: a.type, content: a.content, dataUrl: a.dataUrl, size: a.size,
     }));
 
+    // V1.50: 注入当前页面上下文（让 LLM 知道用户在哪个页面）
+    const pageCtx = { pathname: currentPath, pageName: pageNameFromPath(currentPath) };
+
     try {
       const r = await llmApi.post('/ai-command/command',
-        { command: q, history: historyPayload, attachments: payloadAttachments, deepThinking },
+        { command: q, history: historyPayload, attachments: payloadAttachments, deepThinking, context: pageCtx },
         { signal: controller.signal }
       ).then(r => r.data);
       if (r.error) throw new Error(r.error);
@@ -620,10 +633,12 @@ export function GlobalAIAssistant() {
         window.dispatchEvent(new CustomEvent('avm-data-changed'));
         antdMessage.success('已自动刷新相关页面');
       }
-    } catch (e: any) {
-      if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') { /* 用户停止 */ }
+    } catch (e) {
+      const err = e as any;
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') { /* 用户停止 */ }
       else {
-        setMessages(m => [...m, { id: genId(), role: 'ai', content: `❌ ${e.message}`, time: new Date().toLocaleTimeString('zh-CN') }]);
+        const errMsg = extractApiError(e) ?? '未知错误';
+        setMessages(m => [...m, { id: genId(), role: 'ai', content: `❌ ${errMsg}`, time: new Date().toLocaleTimeString('zh-CN') }]);
       }
     } finally {
       setLoading(false); setAbortController(null);
@@ -642,7 +657,6 @@ export function GlobalAIAssistant() {
 
   const messageCount = messages.filter(m => m.role === 'user').length;
   const hasConfiguredLlm = llmStatus?.configured;
-  const providerLogo = currentProvider?.logo || '🔘';
 
   // 构建模型下拉选项（按厂商分组）
   const modelDropdownItems = useMemoModelDropdown(allProviders, activeProviderKeys, allProviderModels, currentProviderKey, currentModel, switchModel);
@@ -662,10 +676,14 @@ export function GlobalAIAssistant() {
 
       <Drawer
         title={
-          <Space>
+          <Space wrap>
             <RobotOutlined style={{ color: '#1677ff' }} />
             <span>AVM 全局 AI 助理</span>
-            <Tag color="purple" style={{ marginLeft: 8 }}>Ctrl+K</Tag>
+            <Tag color="purple">Ctrl+K</Tag>
+            {/* V1.50: 显示当前页面，让用户知道 LLM 也知道在哪个页面 */}
+            <Tooltip title="当前页面会被注入到 LLM 上下文">
+              <Tag color="geekblue" icon={<EnvironmentOutlined />}>{pageNameFromPath(currentPath)}</Tag>
+            </Tooltip>
             {messageCount > 1 && <Tag color="cyan" icon={<HistoryOutlined />}>已聊 {messageCount} 轮</Tag>}
           </Space>
         }
@@ -682,12 +700,9 @@ export function GlobalAIAssistant() {
         }
         footer={null}
       >
-        {/* V1.45 拖拽上传容器 */}
+        {/* V1.52 拖拽上传容器 — 使用 useDragPasteUpload hook */}
         <div
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
+          {...dragHandlers}
           style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
         >
         {/* V1.45 拖拽上传遮罩 */}
@@ -830,7 +845,7 @@ export function GlobalAIAssistant() {
               ref={textAreaRef}
               value={listening ? (input + (interimText ? ' ' + interimText : '')) : input}
               onChange={e => { if (!listening) handleInputChange(e.target.value); }}
-              onPaste={handlePaste}
+              {...pasteHandler}
               placeholder="帮你编写代码、调试 Bug、优化性能等开发工作，交付生产级代码产物。"
               autoSize={{ minRows: 1, maxRows: 6 }}
               disabled={loading}
@@ -862,7 +877,7 @@ export function GlobalAIAssistant() {
                     style={{ width: 36, height: 32, borderRadius: 16, padding: '0 4px', display: 'flex', alignItems: 'center', gap: 0, color: '#666' }}
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <span style={{ fontSize: 16, lineHeight: 1 }}>{providerLogo}</span>
+                    <FileOutlined style={{ fontSize: 16 }} />
                     <PlusOutlined style={{ fontSize: 10, marginLeft: -2 }} />
                   </Button>
                 </Tooltip>
@@ -895,6 +910,20 @@ export function GlobalAIAssistant() {
                     options={modelDropdownItems}
                     styles={{ popup: { root: { minWidth: 240, maxHeight: 400, overflowY: 'auto' } } }}
                     optionLabelProp="label"
+                    dropdownRender={(menu) => (
+                      <>
+                        {menu}
+                        <Divider style={{ margin: '4px 0' }} />
+                        <a
+                          href="/llm-settings"
+                          onMouseDown={(e) => e.preventDefault()}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#1677ff', padding: '6px 12px', textDecoration: 'none', cursor: 'pointer' }}
+                        >
+                          <PlusOutlined />
+                          <span>添加模型</span>
+                        </a>
+                      </>
+                    )}
                   />
                 ) : (
                   <Button type="link" size="small" onClick={() => window.open('/llm-settings', '_blank')} style={{ fontSize: 12, padding: '0 4px' }}>
@@ -965,84 +994,72 @@ export function GlobalAIAssistant() {
   );
 }
 
-// 构建模型下拉选项（按厂商分组）
+// DeepSeek 品牌 Logo（V1.47：替换原 🔵 emoji）
+function DeepSeekLogo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <circle cx="12" cy="12" r="12" fill="#4D6BFE"/>
+      <path d="M5 13.5c1.2 2.2 3.8 3.5 6.5 3 2.7-.5 4.8-2.5 5.3-5.2.3-1.5 0-3-.8-4.3.8 2.5.3 5-1.5 6.5-1.8 1.5-4.5 1.5-6.5.3-.8-.5-1.5-.8-2.5-.5l-.5.2z" fill="white"/>
+    </svg>
+  );
+}
+
+// 按厂商 key 渲染 logo（deepseek 用 SVG，其他保持 emoji）
+function renderProviderLogo(providerKey: string, fallbackEmoji: string | undefined, size: number) {
+  if (providerKey === 'deepseek') return <DeepSeekLogo size={size} />;
+  return <span style={{ fontSize: size }}>{fallbackEmoji || '🔘'}</span>;
+}
+
+// 构建模型下拉选项（V1.47：只显示已配置厂商及其所有模型；"添加模型"按钮通过 dropdownRender 渲染以保证可点击）
 function useMemoModelDropdown(
   providers: ProviderMeta[],
   activeKeys: Set<string>,
   modelMap: Record<string, string[]>,
   currentProvider: string,
   currentModel: string,
-  switchModel: (pk: string, m: string) => void,
+  _switchModel: (pk: string, m: string) => void,
 ) {
-  // Auto Mode 选项
-  const options: any[] = [{
-    value: '__auto__',
-    label: 'Auto Mode',
-    disabled: true,
-  }];
+  const options: any[] = [];
 
-  // 按已配置厂商排序
-  const sorted = [...providers].sort((a, b) => {
-    const aActive = activeKeys.has(a.key);
-    const bActive = activeKeys.has(b.key);
-    if (aActive && !bActive) return -1;
-    if (!aActive && bActive) return 1;
+  // 只显示已配置厂商，当前厂商排第一
+  const sorted = [...providers].filter(p => activeKeys.has(p.key)).sort((a, b) => {
+    if (a.key === currentProvider) return -1;
+    if (b.key === currentProvider) return 1;
     return 0;
   });
 
   for (const p of sorted) {
-    const isActive = activeKeys.has(p.key);
-    const models = modelMap[p.key] || p.models || [];
-    if (models.length === 0 && !isActive) continue;
+    const models = modelMap[p.key] || [];
+    if (models.length === 0) continue;
 
+    // 厂商分组标题
     options.push({
       value: `__group_${p.key}__`,
       label: (
-        <span style={{ fontSize: 11, color: '#999', padding: '4px 0', userSelect: 'none' }}>
-          {p.logo} {p.name}{!isActive && ' (未配置)'}
+        <span style={{ fontSize: 11, color: '#999', padding: '4px 0', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {renderProviderLogo(p.key, p.logo, 11)} {p.name}
         </span>
       ),
       disabled: true,
     });
 
+    // 该厂商所有已配置模型
     for (const m of models) {
       const isSelected = p.key === currentProvider && m === currentModel;
-      const disabled = !isActive;
       options.push({
         value: `${p.key}::${m}`,
         label: (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
             <Space size={6}>
-              <span style={{ fontSize: 14 }}>{p.logo}</span>
+              {renderProviderLogo(p.key, p.logo, 14)}
               <span>{m}</span>
             </Space>
-            {isSelected ? <CheckOutlined style={{ color: '#4f46e5', fontSize: 12 }} /> :
-              (!isActive ? <LockOutlined style={{ color: '#d9d9d9', fontSize: 12 }} /> : null)}
+            {isSelected && <CheckOutlined style={{ color: '#4f46e5', fontSize: 12 }} />}
           </div>
         ),
-        disabled,
       });
     }
   }
-
-  // 添加模型按钮（分隔线+按钮）
-  options.push({
-    value: '__divider__',
-    label: <Divider style={{ margin: '4px 0' }} />,
-    disabled: true,
-  });
-  options.push({
-    value: '__add_model__',
-    label: (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#1677ff', padding: '4px 0' }}
-        onClick={(e) => { e.stopPropagation(); window.open('/llm-settings', '_blank'); }}
-      >
-        <SettingOutlined />
-        <span>添加模型</span>
-      </div>
-    ),
-    disabled: true,
-  });
 
   return options;
 }

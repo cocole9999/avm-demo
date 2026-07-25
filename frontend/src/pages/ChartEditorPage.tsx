@@ -7,6 +7,7 @@ import { ArrowLeftOutlined, SaveOutlined, EyeOutlined } from '@ant-design/icons'
 import { chartApi, dashboardApi } from '../api';
 import type { ChartConfig, Dashboard } from '../types';
 import { EChart, buildEChartsOption } from '../components/EChart';
+import { notifyApiError } from '../utils/apiError';
 
 const CHART_TYPES = [
   { value: 'bar', label: '柱状图' },
@@ -122,8 +123,8 @@ export function ChartEditorPage() {
     try {
       const data = await chartApi.preview(config);
       setPreview(data);
-    } catch (e: any) {
-      message.error('预览失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '预览失败：');
     } finally {
       setLoading(false);
     }
@@ -155,9 +156,8 @@ export function ChartEditorPage() {
       if (v.dashboardId) {
         navigate(`/dashboards/${v.dashboardId}`);
       }
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('保存失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 

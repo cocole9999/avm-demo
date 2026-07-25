@@ -48,28 +48,31 @@ describe('迭代管理路由', () => {
 
   it('PATCH /api/iterations/:id 更新迭代', async () => {
     if (!serverUp) return;
-    // 先创建一个
+    // 先创建一个 (name 带 timestamp 避免 unique 冲突)
+    const ts = Date.now();
     const createRes = await fetch(`${BASE}/api/iterations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: `待更新迭代-${Date.now()}`,
+        name: `待更新迭代-${ts}`,
         startDate: new Date().toISOString(),
         endDate: new Date(Date.now() + 14 * 86400000).toISOString(),
       }),
+      signal: AbortSignal.timeout(10000),
     });
     const created = await createRes.json();
 
-    // 更新
+    // 更新 (name 仍带 timestamp 避免与其它测试残留冲突)
     const r = await fetch(`${BASE}/api/iterations/${created.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: '已更新迭代', status: 'active' }),
+      body: JSON.stringify({ name: `已更新迭代-${ts}`, status: 'active' }),
+      signal: AbortSignal.timeout(25000),
     });
     expect(r.status).toBe(200);
     const updated = await r.json();
-    expect(updated.name).toBe('已更新迭代');
-  });
+    expect(updated.name).toBe(`已更新迭代-${ts}`);
+  }, 30000);
 
   it('DELETE /api/iterations/:id 删除迭代', async () => {
     if (!serverUp) return;

@@ -23,6 +23,7 @@ import {
 } from '@ant-design/icons';
 import { importApi, ImportResource, ImportMapping, ImportJob } from '../api';
 import { useAuth } from '../AuthContext';
+import { notifyApiError } from '../utils/apiError';
 
 const { Dragger } = Upload;
 
@@ -146,8 +147,8 @@ export function ImportWizardPage() {
       setMapping(r.mapping);
       setEditableRows(r.rows);
       setStep(2);
-    } catch (e: any) {
-      message.error('解析失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '解析失败：');
     }
   };
 
@@ -229,9 +230,9 @@ export function ImportWizardPage() {
       setExecuting(false);
       message.success(`导入完成: 成功 ${resp.result.succeeded} 条, 失败 ${resp.result.failed} 条`);
       loadJobs();
-    } catch (e: any) {
+    } catch (e) {
       setExecuting(false);
-      message.error('导入失败: ' + e.message);
+      notifyApiError(e, '导入失败：');
     }
   };
 

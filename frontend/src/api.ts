@@ -99,6 +99,35 @@ export const commentApi = {
   react: (id: string, emoji: string, user: string) => api.post<{ ok: boolean; reactions: Record<string, string[]>; action: 'added' | 'removed' }>(`/comments/${id}/react`, { emoji, user }).then(r => r.data),
 };
 
+// V1.50: 工作项订阅/关注
+export const watchApi = {
+  watch: (workItemId: string) => api.post<{ ok: boolean; watching: boolean }>(`/work-items/${workItemId}/watch`).then(r => r.data),
+  unwatch: (workItemId: string) => api.delete<{ ok: boolean; watching: boolean }>(`/work-items/${workItemId}/watch`).then(r => r.data),
+  listWatchers: (workItemId: string) => api.get<Array<{ id: string; workItemId: string; userId: string; userName: string; createdAt: string }>>(`/work-items/${workItemId}/watchers`).then(r => r.data),
+  myWatching: () => api.get<Array<{ id: string; workItemId: string; userId: string; userName: string; createdAt: string; workItem: { id: string; key: string; title: string; type: string; status: string; priority: string; updatedAt: string } }>>(`/work-items/watching/me`).then(r => r.data),
+};
+
+// V1.52: 团队共享筛选（云端持久化 + 跨设备/团队共享）
+export interface CloudSavedFilter {
+  id: string;
+  resourceKey: string;
+  name: string;
+  filters: Record<string, any>;
+  shared: boolean;
+  ownerId: string;
+  ownerName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export const savedFilterApi = {
+  list: (resourceKey: string) => api.get<CloudSavedFilter[]>('/saved-filters', { params: { resourceKey } }).then(r => r.data),
+  create: (data: { resourceKey: string; name: string; filters: Record<string, any>; shared?: boolean }) =>
+    api.post<CloudSavedFilter>('/saved-filters', data).then(r => r.data),
+  update: (id: string, data: { name?: string; filters?: Record<string, any>; shared?: boolean }) =>
+    api.patch<CloudSavedFilter>(`/saved-filters/${id}`, data).then(r => r.data),
+  remove: (id: string) => api.delete(`/saved-filters/${id}`).then(r => r.data),
+};
+
 export const mentionApi = {
   search: (q: string) => api.get<Array<{ id: string; username: string; displayName: string; department?: string; role: string; mentionText: string; avatarColor: string }>>('/mentions/search', { params: { q, limit: 10 } }).then(r => r.data),
 };
@@ -189,6 +218,27 @@ export const aiApi = {
   llmStatus: () => api.get('/ai/llm-status').then(r => r.data),
   // V1.31 P1-4: 手动刷新 Wiki 知识快照缓存
   refreshWiki: () => llmApi.post('/ai-command/refresh-wiki', {}).then(r => r.data),
+  // V1.50: AI 长评论摘要
+  summarizeComments: (workItemId: string, comments?: Array<{ author: string; content: string; createdAt?: string }>) =>
+    llmApi.post<{ ok: boolean; skipped: boolean; reason?: string; summary: any | null; commentCount: number; llmModel: string | null }>(
+      '/ai-command/summarize-comments',
+      comments ? { comments } : { workItemId },
+    ).then(r => r.data),
+  // V1.50: AI 自然语言搜索
+  nlSearch: (query: string) =>
+    llmApi.post<{ ok: boolean; target: string; filters: Record<string, any>; humanReadable: string; url: string; source: 'llm' | 'rule' | 'fallback'; confidence?: number; llmModel: string | null; warning?: string }>(
+      '/ai-command/nl-search', { query },
+    ).then(r => r.data),
+  // V1.50: AI 重复 Bug 检测
+  checkDuplicateBug: (data: { title: string; description?: string; threshold?: number; projectId?: string }) =>
+    llmApi.post<{ ok: boolean; queryTitle: string; scannedCount: number; threshold: number; duplicateCount: number; duplicates: any[] }>(
+      '/ai-command/check-duplicate-bug', data,
+    ).then(r => r.data),
+  // V1.50: AI 一键归类（合并 aiFillWorkItem + aiSuggestAssignee）
+  autoClassify: (data: { title: string; type?: string; priority?: string; hint?: string; projectCode?: string }) =>
+    llmApi.post<{ ok: boolean; filled: any; reasoning: string; llmModel: string }>(
+      '/ai-command/auto-classify', data,
+    ).then(r => r.data),
 };
 
 export const userApi = {

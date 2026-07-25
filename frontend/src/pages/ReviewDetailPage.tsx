@@ -10,6 +10,8 @@ import {
 } from '@ant-design/icons';
 import { reviewApi, activityApi } from '../api';
 import type { Review, Activity } from '../types';
+import { notifyApiError } from '../utils/apiError';
+import { AppBreadcrumb } from '../components/AppBreadcrumb';
 
 const REVIEW_TYPE_LABEL: Record<string, string> = { tr: '技术评审 TR', dcp: '决策评审 DCP', qr: '质量评审 QR' };
 const REVIEW_TYPE_COLOR: Record<string, string> = { tr: 'blue', dcp: 'purple', qr: 'cyan' };
@@ -30,6 +32,7 @@ export function ReviewDetailPage() {
   const [finalizeOpen, setFinalizeOpen] = useState(false);
   const [submission, setSubmission] = useState<Record<string, any>>({});
   const [summary, setSummary] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -53,6 +56,8 @@ export function ReviewDetailPage() {
   const isFinalized = review.status === 'approved' || review.status === 'rejected';
 
   const handleSubmit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const submissions = Object.entries(submission).map(([itemId, value]) => {
         const item = review.items!.find(i => i.id === itemId)!;
@@ -65,8 +70,10 @@ export function ReviewDetailPage() {
       await reviewApi.submit(review.id, 'zhangsan', submissions);
       message.success('已提交');
       load();
-    } catch (e: any) {
-      message.error('提交失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '提交失败：');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -76,8 +83,8 @@ export function ReviewDetailPage() {
       message.success(`评审已${CONCLUSION_LABEL[conclusion]}`);
       setFinalizeOpen(false);
       load();
-    } catch (e: any) {
-      message.error('操作失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '操作失败：');
     }
   };
 
@@ -96,6 +103,14 @@ export function ReviewDetailPage() {
 
   return (
     <div>
+      {/* V1.48: 面包屑导航（工作台 / 评审 / 编号） */}
+      <AppBreadcrumb
+        items={[
+          { label: '工作台', path: '/workbench' },
+          { label: '评审中心', path: '/reviews' },
+        ]}
+        extra={[{ label: review.title }]}
+      />
       <Card style={{ marginBottom: 12 }}>
         <Space style={{ marginBottom: 12 }}>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/reviews')}>返回</Button>
@@ -190,7 +205,7 @@ export function ReviewDetailPage() {
             ))}
             {!isFinalized && (
               <Space>
-                <Button type="primary" onClick={handleSubmit}>提交我的评审</Button>
+                <Button type="primary" onClick={handleSubmit} loading={submitting}>提交我的评审</Button>
                 <Button onClick={() => setSubmission({})}>清空</Button>
               </Space>
             )}

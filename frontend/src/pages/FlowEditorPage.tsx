@@ -17,6 +17,8 @@ import {
 } from '@ant-design/icons';
 import { flowApi } from '../api';
 import type { NodeFlow, FlowNode, FlowTransition } from '../types';
+import { AppBreadcrumb } from '../components/AppBreadcrumb';
+import { notifyApiError } from '../utils/apiError';
 
 const NODE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   start: { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
@@ -130,8 +132,8 @@ function FlowEditorInner() {
         markerEnd: { type: MarkerType.ArrowClosed },
         style: { stroke: t.isDefault ? '#1677ff' : '#999', strokeWidth: t.isDefault ? 2 : 1.5 },
       })));
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     }
   }, [id, setRfNodes, setRfEdges]);
 
@@ -215,8 +217,8 @@ function FlowEditorInner() {
       message.success('已保存');
       setFlow(updated);
       load();
-    } catch (e: any) {
-      message.error('保存失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 
@@ -246,8 +248,8 @@ function FlowEditorInner() {
       } : n));
       message.success('已更新（记得保存）');
       setDrawerOpen(false);
-    } catch (e: any) {
-      if (e.errorFields) return;
+    } catch (e) {
+      if (e && typeof e === 'object' && 'errorFields' in e) return;
     }
   };
 
@@ -255,6 +257,14 @@ function FlowEditorInner() {
 
   return (
     <div>
+      {/* V1.48: 面包屑导航（工作台 / 流程 / 名称） */}
+      <AppBreadcrumb
+        items={[
+          { label: '工作台', path: '/workbench' },
+          { label: '流程引擎', path: '/flows' },
+        ]}
+        extra={[{ label: flow.name }]}
+      />
       <Card style={{ marginBottom: 12 }} styles={{ body: { padding: 12 } }}>
         <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/flows')}>返回</Button>

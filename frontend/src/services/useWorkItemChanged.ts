@@ -4,6 +4,8 @@
  * 用法：
  *   useWorkItemChanged(() => { load(); }, { key: item?.key });
  *   useWorkItemChanged(() => { load(); });  // 任何工作项变更都刷新
+ *
+ * V1.48: 清理 3 条调试 console.log（生产环境会污染控制台）
  */
 import { useEffect, useRef } from 'react';
 import { wsClient } from './ws';
@@ -21,17 +23,14 @@ export function useWorkItemChanged(
     if (opts?.skip) return;
     const handler = (msg: WSMessage) => {
       if (msg.type !== 'work_item_changed') return;
-      console.log('[useWorkItemChanged] 收到事件:', msg, 'opts:', opts);
       // 如果指定了 key/id，只刷新匹配的工作项
       if (opts?.key && msg.key !== opts.key && opts?.id && msg.id !== opts.id) return;
       if (opts?.id && msg.id !== opts.id) return;
       if (opts?.key && msg.key !== opts.key) return;
       // 收到变更事件后刷新
-      console.log('[useWorkItemChanged] 触发刷新');
       callbackRef.current();
     };
     const off = wsClient.on('work_item_changed', handler);
-    console.log('[useWorkItemChanged] 已订阅 work_item_changed, opts:', opts);
     return off;
   }, [opts?.key, opts?.id, opts?.skip]);
 }

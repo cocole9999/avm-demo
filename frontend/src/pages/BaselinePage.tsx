@@ -7,6 +7,7 @@ import { Card, Table, Button, Modal, Form, Input, Select, Space, Tag, Empty, Spi
 import { PlusOutlined, CameraOutlined, SwapOutlined, ReloadOutlined, DeleteOutlined, EyeOutlined, DiffOutlined } from '@ant-design/icons';
 import { baselineApi, type Baseline } from '../api';
 import dayjs from 'dayjs';
+import { notifyApiError } from '../utils/apiError';
 
 export function BaselinePage() {
   const [list, setList] = useState<Baseline[]>([]);
@@ -14,6 +15,7 @@ export function BaselinePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [compareData, setCompareData] = useState<any>(null);
   const [comparing, setComparing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -25,12 +27,15 @@ export function BaselinePage() {
   useEffect(() => { load(); }, []);
 
   const handleCreate = async (values: any) => {
+    if (submitting) return;
+    setSubmitting(true);
     try {
       await baselineApi.create(values);
       message.success('基线已创建');
       setModalOpen(false);
       load();
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
+    finally { setSubmitting(false); }
   };
 
   const handleCompare = async (b: Baseline) => {
@@ -38,7 +43,7 @@ export function BaselinePage() {
     try {
       const r = await baselineApi.compare(b.id);
       setCompareData(r);
-    } catch (e: any) { message.error(e.message); }
+    } catch (e) { notifyApiError(e); }
     finally { setComparing(false); }
   };
 
@@ -91,7 +96,7 @@ export function BaselinePage() {
       </Card>
 
       {/* 创建基线 */}
-      <Modal title="创建基线" open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => {
+      <Modal title="创建基线" open={modalOpen} onCancel={() => setModalOpen(false)} confirmLoading={submitting} onOk={() => {
         const form = (document.getElementById('baseline-form') as any)?._form;
         if (form) form.submit();
       }} okText="创建" width={500}>

@@ -243,7 +243,8 @@ aiCommandRouter.post('/command', async (req, res) => {
         let args: any = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); }
         catch { args = {}; }
-        console.log(`[ai-command] 工具调用: ${name}`, JSON.stringify(args).slice(0, 300));
+        // V1.48: 只记录工具名，不记录参数（避免泄露业务数据到 stdout）
+        console.log(`[ai-command] 工具调用: ${name}`);
         try {
           const result = await executeTool(name, args);
           toolCalls.push({ id, name, args, result });
@@ -539,6 +540,134 @@ ${userList}
       ok: true,
       assignee: result.assignee,
       reasoning: result.reasoning || '',
+      llmModel: r.model,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * V1.50: AI 一键归类（合并 aiFillWorkItem + aiSuggestAssignee）
+ * POST /api/ai-command/auto-classify
+ * body: { title, type?, priority?, hint?, projectCode? }
+ * 输出: { ok, filled: { type, priority, description, estimate, assignee, projectId, projectCode, module, labels? }, reasoning, llmModel }
+ * - 单次 LLM 调用，效率是双倍的 1.6-1.8x
+ * - 字段白名单防止批量赋值
+ */
+aiCommandRouter.post('/auto-classify', async (req, res) => {
+  try {
+    const { title, type, priority, hint, projectCode } = req.body || {};
+    if (!title || title.length < 2) return res.status(400).json({ error: 'title 至少 2 字符' });
+
+    const provider = await getLLMProvider();
+    if (!provider.isAvailable() || provider.name === 'mock') {
+      return res.status(400).json({ error: 'LLM 未配置' });
+    }
+
+    const snapshot = await buildProjectSnapshot();
+    const wiki = loadWikiKnowledge();
+    const users = await prisma.user.findMany({ select: { displayName: true, username: true, role: true, department: true } });
+
+    // 计算人员负载（30 天）
+    const since = new Date(Date.now() - 30 * 86400000);
+    const items = await prisma.workItem.findMany({
+      where: { createdAt: { gte: since } },
+      select: { assignee: true, type: true, status: true, priority: true },
+    });
+    const userLoad: Record<string, { total: number; active: number; p0p1: number; types: Record<string, number> }> = {};
+    for (const i of items) {
+      if (!i.assignee) continue;
+      if (!userLoad[i.assignee]) userLoad[i.assignee] = { total: 0, active: 0, p0p1: 0, types: {} };
+      userLoad[i.assignee].total++;
+      if (!['已完成', '已关闭', '已驳回', '已发布', '已验收'].includes(i.status)) {
+        userLoad[i.assignee].active++;
+        if (i.priority === 'P0' || i.priority === 'P1') userLoad[i.assignee].p0p1++;
+      }
+      userLoad[i.assignee].types[i.type] = (userLoad[i.assignee].types[i.type] || 0) + 1;
+    }
+    const userList = users.map(u => {
+      const load = userLoad[u.displayName] || { total: 0, active: 0, p0p1: 0, types: {} };
+      return `- ${u.displayName} (${u.role}, ${u.department || '未填'}, 30天总 ${load.total}/在做 ${load.active}/P0P1 ${load.p0p1}, 类型 ${JSON.stringify(load.types)})`;
+    }).join('\n');
+
+    const prompt = `你是 AVM 项目分类与分配专家，一次性输出所有推荐字段。
+
+## 用户输入
+- 标题: "${title}"
+- 类型(可选): ${type || '不指定'}
+- 优先级(可选): ${priority || '不指定'}
+- 项目编码(可选): ${projectCode || '不指定'}${hint ? `\n- 补充: ${hint}` : ''}
+
+## 人员清单(带 30 天负载)
+${userList}
+
+## 项目快照
+${snapshot.text}
+
+## 严格只返回 JSON(不要其他文字、不要 markdown 包裹)
+{
+  "type": "requirement" | "task" | "bug" | "release",
+  "priority": "P0" | "P1" | "P2" | "P3",
+  "description": "详细 Markdown 描述(2-4 句话, 含标题/验收标准/依赖)",
+  "estimate": 估算小时数(数字),
+  "assignee": "推荐负责人(必须精确匹配人员清单中的 displayName)",
+  "projectCode": "推荐项目编码(从快照中真实存在的编码选, 无合适则填 null)",
+  "module": "模块名(如 '登录模块'、'车机 HMI', 简短)",
+  "labels": ["可选标签数组, 最多 5 个"],
+  "reasoning": "一句话说明推荐依据"
+}
+
+## 规则
+1. type 优先级: 关键字含"修复/报错/闪退/异常/无法"→ bug; 含"发布/版本"→ release; 含"作为/需要/希望"或复杂功能→ requirement; 否则 task
+2. priority: 涉及资金/安全/线上问题→ P0; 重要功能→ P1; 日常→ P2; 微小→ P3
+3. assignee 优先角色匹配(测试/开发/产品/PM), 选 active 少、P0P1 少的人
+4. projectCode 必须从快照中真实存在的编码选, 不要编造
+5. 不在数据中的字段填 null
+6. 中文输出`;
+
+    const r = await provider.chat([
+      { role: 'system', content: `${wiki.text}\n\n---\n\n${snapshot.text}\n\n你只返回 JSON。` },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.3, maxTokens: 1500 });
+
+    const text = r.content.trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return res.status(500).json({ error: 'AI 没返回有效 JSON', raw: text });
+    const filled = JSON.parse(jsonMatch[0]);
+
+    // 字段白名单
+    const safeFilled: any = {
+      type: ['requirement', 'task', 'bug', 'release'].includes(filled.type) ? filled.type : (type || 'task'),
+      priority: ['P0', 'P1', 'P2', 'P3'].includes(filled.priority) ? filled.priority : (priority || 'P2'),
+      description: String(filled.description || '').slice(0, 4000),
+      estimate: Number(filled.estimate) || 0,
+      assignee: '',
+      projectId: null,
+      projectCode: '',
+      module: String(filled.module || '').slice(0, 50),
+      labels: Array.isArray(filled.labels) ? filled.labels.slice(0, 5).map((l: any) => String(l).slice(0, 30)) : [],
+    };
+
+    // 校验 assignee
+    const validAssignees = new Set(users.map(u => u.displayName));
+    if (filled.assignee && validAssignees.has(filled.assignee)) {
+      safeFilled.assignee = filled.assignee;
+    }
+
+    // 解析 projectCode
+    if (filled.projectCode) {
+      const p = await prisma.project.findUnique({ where: { code: filled.projectCode } });
+      if (p) {
+        safeFilled.projectId = p.id;
+        safeFilled.projectCode = p.code;
+      }
+    }
+
+    res.json({
+      ok: true,
+      filled: safeFilled,
+      reasoning: String(filled.reasoning || '').slice(0, 500),
       llmModel: r.model,
     });
   } catch (e: any) {
@@ -1249,6 +1378,35 @@ function generateReportMarkdown(opts: {
   lines.push(`> **数据范围**: ${scope}`);
   lines.push('');
 
+  // V1.50: 0. 重点概要（用 emoji + 彩色徽章风格快速展示关键数据）
+  const highlights: string[] = [];
+  if (highRiskProjects.length > 0) {
+    highlights.push(`- 🔴 **${highRiskProjects.length}** 个高风险项目需关注`);
+  }
+  if (criticalItems.length > 0) {
+    const overdueCritical = criticalItems.filter((i: any) => i.planEnd && new Date(i.planEnd) < new Date()).length;
+    if (overdueCritical > 0) highlights.push(`- 🚨 **${overdueCritical}** 项 P0/P1 已超期未完成`);
+    else highlights.push(`- ⚠️ **${criticalItems.length}** 项 P0/P1 待推进`);
+  }
+  if (completedItems.length > 0) {
+    highlights.push(`- ✅ 本期完成 **${completedItems.length}** 个工作项`);
+  }
+  if (newItems.length > 0) {
+    highlights.push(`- 🆕 新增 **${newItems.length}** 个工作项`);
+  }
+  const overdueProjects = projects.filter(p => p.daysLeft < 0).length;
+  if (overdueProjects > 0) {
+    highlights.push(`- ⏰ **${overdueProjects}** 个项目已超期`);
+  }
+  if (highlights.length > 0) {
+    lines.push('## ⭐ 重点概要');
+    lines.push('');
+    lines.push('> 本期一句话速览：');
+    lines.push('');
+    lines.push(...highlights);
+    lines.push('');
+  }
+
   // 1) 概览
   lines.push('## 一、概览');
   lines.push('');
@@ -1348,4 +1506,433 @@ function generateReportMarkdown(opts: {
   lines.push('---');
   lines.push(`*本报告由 AVM 平台自动生成 · ${new Date().toLocaleString('zh-CN')}*`);
   return lines.join('\n');
+}
+
+/**
+ * V1.50: AI 长评论摘要
+ * POST /api/ai-command/summarize-comments
+ * body: { workItemId: string, comments?: Array<{author, content, createdAt}> }
+ * - 不传 comments 时从 DB 拉
+ * - 评论 < 3 条时直接拒绝（无需 AI）
+ * - 返回: { ok, summary: { decisions, openQuestions, actionItems, sentiment }, llmModel }
+ */
+aiCommandRouter.post('/summarize-comments', async (req, res) => {
+  try {
+    const { workItemId, comments: inputComments } = req.body || {};
+    if (!workItemId && !Array.isArray(inputComments)) {
+      return res.status(400).json({ error: 'workItemId 或 comments 至少传一个' });
+    }
+
+    let comments: Array<{ author: string; content: string; createdAt?: string }> = [];
+    if (Array.isArray(inputComments) && inputComments.length > 0) {
+      comments = inputComments.map(c => ({
+        author: String(c.author || '匿名'),
+        content: String(c.content || ''),
+        createdAt: c.createdAt ? String(c.createdAt) : undefined,
+      })).filter(c => c.content.trim());
+    } else {
+      const items = await prisma.comment.findMany({
+        where: { workItemId },
+        orderBy: { createdAt: 'asc' },
+        select: { author: true, content: true, createdAt: true },
+      });
+      comments = items.map(c => ({ author: c.author, content: c.content, createdAt: c.createdAt.toISOString() }));
+    }
+
+    // V1.50: 评论过少直接返回（节省 LLM token）
+    if (comments.length < 3) {
+      return res.json({
+        ok: true,
+        skipped: true,
+        reason: `评论数仅 ${comments.length} 条，无需 AI 摘要`,
+        summary: null,
+        commentCount: comments.length,
+      });
+    }
+
+    // 构造评论文本
+    const commentText = comments.map((c, i) => {
+      const time = c.createdAt ? c.createdAt.slice(0, 16).replace('T', ' ') : '';
+      return `[${i + 1}] ${c.author}${time ? ` (${time})` : ''}: ${c.content}`;
+    }).join('\n');
+
+    const provider = await getLLMProvider();
+    // 无 LLM 时的降级：基于关键词的极简摘要
+    if (!provider.isAvailable() || provider.name === 'mock') {
+      return res.json({
+        ok: true,
+        skipped: true,
+        reason: 'LLM 未配置，使用基础关键词摘要',
+        summary: fallbackSummary(comments),
+        commentCount: comments.length,
+        llmModel: null,
+      });
+    }
+
+    const prompt = `你是一位 AVM 项目经理助理。请基于以下工作项的 ${comments.length} 条评论，提炼出三类信息，方便快速掌握讨论脉络。
+
+【评论列表】
+${commentText}
+
+只返回严格 JSON 对象（不要其他文字、不要 markdown 包裹）：
+{
+  "decisions": ["已确定的关键决策（最多 5 条，每条不超过 30 字）"],
+  "openQuestions": ["尚未解决/待澄清的问题（最多 5 条）"],
+  "actionItems": [{"who": "负责人或角色", "what": "行动项（不超过 30 字）", "when": "预期时间或 null"}],
+  "sentiment": "positive | neutral | mixed | negative",
+  "oneLiner": "一句话总结讨论主题（不超过 30 字）"
+}
+
+规则：
+1. 只总结评论中真实提到的内容，不要编造
+2. 行动项的 who 必须是评论中出现的人名或角色（如"开发"），没提到则填 null
+3. 中文输出
+4. 如果某类没有内容，返回空数组`;
+
+    const r = await provider.chat([
+      { role: 'system', content: `${loadWikiKnowledge().text}\n\n你是 AVM 项目经理助理，输出严谨的 JSON。` },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.2, maxTokens: 1200 });
+
+    const text = r.content.trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.json({
+        ok: true,
+        skipped: true,
+        reason: 'AI 返回格式异常，使用基础摘要',
+        summary: fallbackSummary(comments),
+        commentCount: comments.length,
+        llmModel: r.model,
+      });
+    }
+    const summary = JSON.parse(jsonMatch[0]);
+
+    res.json({
+      ok: true,
+      skipped: false,
+      summary: {
+        decisions: Array.isArray(summary.decisions) ? summary.decisions.slice(0, 5) : [],
+        openQuestions: Array.isArray(summary.openQuestions) ? summary.openQuestions.slice(0, 5) : [],
+        actionItems: Array.isArray(summary.actionItems) ? summary.actionItems.slice(0, 8) : [],
+        sentiment: ['positive', 'neutral', 'mixed', 'negative'].includes(summary.sentiment) ? summary.sentiment : 'neutral',
+        oneLiner: String(summary.oneLiner || '').slice(0, 50),
+      },
+      commentCount: comments.length,
+      llmModel: r.model,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** 关键词式极简摘要（LLM 不可用时降级） */
+function fallbackSummary(comments: Array<{ author: string; content: string }>) {
+  const actionKeywords = /(需要|应该|必须|@|TODO|FIXME|要做|完成后|跟进|PR|提单|同步)/i;
+  const decisionKeywords = /(决定|确认|已|搞定|OK|同意|定了|完成)/;
+  const questionKeywords = /[?？]|为什么|怎么|何时|能否|是不是/;
+
+  const actionItems: { who: string; what: string; when: string | null }[] = [];
+  const decisions: string[] = [];
+  const openQuestions: string[] = [];
+  for (const c of comments) {
+    const firstLine = c.content.split('\n')[0].trim();
+    if (actionKeywords.test(c.content)) actionItems.push({ who: c.author, what: firstLine.slice(0, 30), when: null });
+    if (decisionKeywords.test(c.content)) decisions.push(firstLine.slice(0, 30));
+    if (questionKeywords.test(c.content)) openQuestions.push(firstLine.slice(0, 30));
+  }
+  return {
+    decisions: decisions.slice(0, 5),
+    openQuestions: openQuestions.slice(0, 5),
+    actionItems: actionItems.slice(0, 8),
+    sentiment: 'neutral' as const,
+    oneLiner: `共 ${comments.length} 条讨论`,
+  };
+}
+
+/**
+ * V1.50: AI 自然语言搜索
+ * POST /api/ai-command/nl-search
+ * body: { query: string }
+ * 解析自然语言为 query DSL，返回结构化筛选条件 + 跳转 URL
+ * 例子: "上周延期项目" → { status: '延期' or planEnd < now, createdAt >= -7d }
+ *       "我负责的 P0 需求" → { assignee: 我, priority: P0, type: requirement }
+ */
+aiCommandRouter.post('/nl-search', async (req, res) => {
+  try {
+    const { query } = req.body || {};
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return res.status(400).json({ error: 'query 必填' });
+    }
+    const q = query.trim();
+    if (q.length > 200) {
+      return res.status(400).json({ error: 'query 过长（最多 200 字符）' });
+    }
+
+    const provider = await getLLMProvider();
+    if (!provider.isAvailable() || provider.name === 'mock') {
+      // 降级：基于正则的关键字匹配
+      const fallback = ruleBasedNlSearch(q);
+      return res.json({ ok: true, llmModel: null, source: 'rule', ...fallback });
+    }
+
+    const prompt = `你是一位 AVM 项目查询专家。请把用户的自然语言搜索条件解析为结构化查询 DSL。
+
+## 用户查询
+"${q}"
+
+## 可筛选字段
+- type: requirement | task | bug | release
+- priority: P0 | P1 | P2 | P3
+- status: 待领取 | 进行中 | 已完成 | 已关闭 | 已驳回 | 已发布 | 已验收 | 延期 | 阻塞
+- assignee: 人员 displayName（如"张三"），或 "me" 表示当前用户
+- reporter: 同上
+- projectCode: 项目编码（如 AVM-GALAXY-L7-2026）
+- customerCode: 客户编码
+- label: 标签
+- createdWithinDays: 最近 N 天创建的数字（如 7 = 7 天内创建）
+- completedWithinDays: 最近 N 天完成
+- overdue: true 表示超期未完成
+- keyword: 标题/描述里的关键词
+
+## 规则
+1. 只输出用户明确表达的筛选条件；没有的字段不返回
+2. 模糊时间词映射：
+   - "今天" → createdWithinDays: 1
+   - "昨天" → createdWithinDays: 2（粗略匹配）
+   - "本周/这周" → createdWithinDays: 7
+   - "上周" → createdWithinDays: 14 (但需要排除近 7 天)
+   - "最近" → 默认 7 天
+   - "本月" → createdWithinDays: 30
+   - "本季度" → createdWithinDays: 90
+3. "我" / "我的" → 映射到 me（前端会替换为当前用户名）
+4. 数字 "P0" 保留为 P0
+5. "延期" / "超期" → overdue: true
+6. "紧急" → priority: P0
+7. 目标资源默认是 "workitem"（工作项），但用户提到"项目"则 target = "project"
+
+## 输出格式（严格 JSON）
+{
+  "target": "workitem" | "project" | "customer" | "comment",
+  "filters": { ... 上面字段 ... },
+  "humanReadable": "一句话解释解析结果",
+  "confidence": 0.0-1.0
+}`;
+
+    const r = await provider.chat([
+      { role: 'system', content: `${loadWikiKnowledge().text}\n\n你只返回 JSON。` },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.1, maxTokens: 600 });
+
+    const text = r.content.trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      const fallback = ruleBasedNlSearch(q);
+      return res.json({ ok: true, llmModel: r.model, source: 'fallback', ...fallback });
+    }
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    // 构造 URL
+    const url = buildSearchUrl(parsed.target || 'workitem', parsed.filters || {});
+
+    res.json({
+      ok: true,
+      llmModel: r.model,
+      source: 'llm',
+      target: parsed.target || 'workitem',
+      filters: parsed.filters || {},
+      humanReadable: parsed.humanReadable || '',
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.8,
+      url,
+    });
+  } catch (e: any) {
+    // 出错时降级到规则
+    try {
+      const fallback = ruleBasedNlSearch(req.body?.query || '');
+      res.json({ ok: true, llmModel: null, source: 'fallback', ...fallback, warning: e.message });
+    } catch {
+      res.status(500).json({ error: e.message });
+    }
+  }
+});
+
+/** 规则化 NL 搜索（LLM 不可用时降级） */
+function ruleBasedNlSearch(q: string): { target: string; filters: any; humanReadable: string; url: string } {
+  const filters: any = {};
+  let target: 'workitem' | 'project' | 'customer' = 'workitem';
+  if (/项目/.test(q)) target = 'project';
+  if (/客户/.test(q)) target = 'customer';
+
+  // 优先级
+  const pm = q.match(/P([0-3])/i);
+  if (pm) filters.priority = `P${pm[1].toUpperCase()}`;
+  if (/紧急|最重要|高优/.test(q)) filters.priority = 'P0';
+
+  // 类型
+  if (/需求/.test(q)) filters.type = 'requirement';
+  if (/缺陷|bug|Bug/.test(q)) filters.type = 'bug';
+  if (/任务/.test(q)) filters.type = 'task';
+  if (/发布|版本|release/i.test(q)) filters.type = 'release';
+
+  // 时间
+  if (/今天/.test(q)) filters.createdWithinDays = 1;
+  else if (/昨天/.test(q)) filters.createdWithinDays = 2;
+  else if (/本周|这周/.test(q)) filters.createdWithinDays = 7;
+  else if (/上周/.test(q)) filters.createdWithinDays = 14;
+  else if (/本月/.test(q)) filters.createdWithinDays = 30;
+  else if (/本季度/.test(q)) filters.createdWithinDays = 90;
+  const daysMatch = q.match(/最近\s*(\d+)\s*[天日]/);
+  if (daysMatch) filters.createdWithinDays = Math.min(parseInt(daysMatch[1], 10), 365);
+
+  // 延期/超期
+  if (/延期|超期|逾期/.test(q)) filters.overdue = true;
+
+  // 阻塞
+  if (/阻塞|卡住|等待/.test(q)) filters.status = '阻塞';
+
+  // assignee
+  if (/我的|我负责|我接/.test(q)) filters.assignee = 'me';
+  if (/我创建的|我提的/.test(q)) filters.reporter = 'me';
+
+  // 提取人员名（粗略：中文字符 2-4 个）
+  const personMatch = q.match(/^([\u4e00-\u9fa5]{2,4})(的|负责|完成|的)/);
+  if (personMatch && !/我/.test(personMatch[1])) {
+    filters.assignee = personMatch[1];
+  }
+
+  // 关键词搜索
+  const keywordMatch = q.match(/[「"'"](.+?)[」"'"]/);
+  if (keywordMatch) filters.keyword = keywordMatch[1];
+
+  return {
+    target,
+    filters,
+    humanReadable: `规则解析: ${Object.entries(filters).map(([k, v]) => `${k}=${v}`).join(', ') || '无筛选'}`,
+    url: buildSearchUrl(target, filters),
+  };
+}
+
+/** 把 filters 拼到对应目标页的 URL */
+function buildSearchUrl(target: string, filters: any): string {
+  const params = new URLSearchParams();
+  if (filters.priority) params.set('priority', filters.priority);
+  if (filters.type) params.set('type', filters.type);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.assignee) params.set('assignee', filters.assignee);
+  if (filters.reporter) params.set('reporter', filters.reporter);
+  if (filters.projectCode) params.set('projectCode', filters.projectCode);
+  if (filters.customerCode) params.set('customerCode', filters.customerCode);
+  if (filters.label) params.set('label', filters.label);
+  if (filters.createdWithinDays) params.set('withinDays', String(filters.createdWithinDays));
+  if (filters.completedWithinDays) params.set('completedWithinDays', String(filters.completedWithinDays));
+  if (filters.overdue) params.set('overdue', '1');
+  if (filters.keyword) params.set('q', filters.keyword);
+
+  if (target === 'project') return `/projects?${params.toString()}`;
+  if (target === 'customer') return `/customers?${params.toString()}`;
+  return `/workitems?${params.toString()}`;
+}
+
+/**
+ * V1.50: AI 重复 Bug 检测
+ * POST /api/ai-command/check-duplicate-bug
+ * body: { title: string, description?: string, threshold?: number, projectId?: string }
+ * 拉最近 60 天所有 type=bug 的工作项，用标题+描述相似度（关键词 + 字符级）找相似 Bug
+ * 返回: { ok, duplicates: [{ id, key, title, status, priority, similarity, reason }] }
+ */
+aiCommandRouter.post('/check-duplicate-bug', async (req, res) => {
+  try {
+    const { title, description = '', threshold = 0.35, projectId } = req.body || {};
+    if (!title || typeof title !== 'string' || title.length < 4) {
+      return res.status(400).json({ error: 'title 至少 4 字符' });
+    }
+
+    const since = new Date(Date.now() - 90 * 86400000); // 90 天内
+    const where: any = {
+      type: 'bug',
+      createdAt: { gte: since },
+    };
+    if (projectId) where.projectId = projectId;
+
+    const recentBugs = await prisma.workItem.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        id: true, key: true, title: true, description: true, status: true,
+        priority: true, assignee: true, createdAt: true,
+      },
+    });
+
+    const inputTokens = tokenize(`${title} ${description}`);
+    const duplicates = recentBugs
+      .map(b => {
+        const bugTokens = tokenize(`${b.title} ${b.description || ''}`);
+        const sim = jaccardSimilarity(inputTokens, bugTokens);
+        const titleSim = jaccardSimilarity(tokenize(title), tokenize(b.title));
+        // 综合相似度 = 60% title + 40% 全字段
+        const overall = titleSim * 0.6 + sim * 0.4;
+        return { bug: b, similarity: overall, titleSim };
+      })
+      .filter(x => x.similarity >= threshold)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5)
+      .map(x => ({
+        id: x.bug.id,
+        key: x.bug.key,
+        title: x.bug.title,
+        status: x.bug.status,
+        priority: x.bug.priority,
+        assignee: x.bug.assignee,
+        createdAt: x.bug.createdAt,
+        similarity: Math.round(x.similarity * 100) / 100,
+        titleSim: Math.round(x.titleSim * 100) / 100,
+        reason: x.titleSim > 0.5 ? '标题高度相似' : '描述包含相同关键词',
+      }));
+
+    res.json({
+      ok: true,
+      queryTitle: title,
+      scannedCount: recentBugs.length,
+      threshold,
+      duplicateCount: duplicates.length,
+      duplicates,
+    });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** 简单中文分词（按字符 + 标点切分，过滤停用词） */
+const STOP_WORDS = new Set(['的', '了', '在', '是', '我', '你', '他', '她', '它', '这', '那', '和', '与', '及', '或', '但', '而', '所以', '因为', '一个', '一些', '一种', '这个', '那个', '一个', '与', '为', '为了', '从', '到', '向', '从', '上', '下', '里', '外', '内', '中', '以', '被', '把', '让', '使', '通过', '与', '及']);
+
+function tokenize(text: string): Set<string> {
+  if (!text) return new Set();
+  const cleaned = text.toLowerCase().replace(/[^\u4e00-\u9fa5a-z0-9\s]/g, ' ');
+  // 中文: 拆成 2-gram；英文: 拆成单词
+  const tokens = new Set<string>();
+  for (const word of cleaned.split(/\s+/)) {
+    if (!word) continue;
+    if (/^[\u4e00-\u9fa5]+$/.test(word)) {
+      if (word.length >= 2 && !STOP_WORDS.has(word)) {
+        // 单字 + 2-gram
+        tokens.add(word);
+        for (let i = 0; i < word.length - 1; i++) {
+          const g = word.slice(i, i + 2);
+          if (!STOP_WORDS.has(g)) tokens.add(g);
+        }
+      }
+    } else {
+      if (word.length >= 2 && !STOP_WORDS.has(word)) tokens.add(word);
+    }
+  }
+  return tokens;
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
 }

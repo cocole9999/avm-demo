@@ -86,3 +86,6 @@ venv/
 # Local docker volumes
 postgres-data/
 *.dump
+
+# Auto-generated Swagger spec (由 npm run gen:swagger 生成)
+backend/swagger-output.json

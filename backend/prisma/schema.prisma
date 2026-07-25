@@ -55,6 +55,7 @@ model WorkItem {
   customer      Customer?          @relation(fields: [customerId], references: [id])
   relatedTo     WorkItemRelation[] @relation("RelationTo")
   relatedFrom   WorkItemRelation[] @relation("RelationFrom")
+  watchers      WorkItemWatcher[]
 
   @@index([type])
   @@index([status])
@@ -68,6 +69,37 @@ model WorkItem {
   // V1.10 甘特图范围查询
   @@index([planStart, planEnd])
   @@index([projectId, planStart])
+}
+
+// V1.50 工作项订阅/关注 — 用户关注后获得状态/评论变更通知
+model WorkItemWatcher {
+  id         String   @id @default(cuid())
+  workItemId String
+  userId     String
+  userName   String   // 冗余便于通知展示
+  createdAt  DateTime @default(now())
+  workItem   WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@unique([workItemId, userId])
+  @@index([userId])
+  @@index([workItemId])
+}
+
+// V1.52 团队共享筛选 — localStorage 升级为后端存储，支持跨设备/团队共享
+model SavedFilter {
+  id          String   @id @default(cuid())
+  resourceKey String   // 资源命名空间，如 'work-items-requirement'
+  name        String
+  filters     String   // JSON 序列化的筛选条件
+  shared      Boolean  @default(false) // 团队共享开关
+  ownerId     String   // 创建人 user.id
+  ownerName   String   // 冗余便于展示
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([resourceKey, ownerId, name]) // 同人同资源不重名
+  @@index([resourceKey, shared])
+  @@index([ownerId])
 }
 
 model WorkItemRelation {

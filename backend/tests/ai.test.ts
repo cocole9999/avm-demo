@@ -69,11 +69,12 @@ describe('AI 功能路由', () => {
         title: '测试缺陷',
         description: '测试描述',
       }),
+      signal: AbortSignal.timeout(15000),
     });
     expect(r.status).toBe(200);
     const result = await r.json();
     expect(result).toBeDefined();
-  });
+  }, 20000);
 
   it('POST /api/ai/qa 智能问答', async () => {
     if (!serverUp) return;
@@ -83,9 +84,10 @@ describe('AI 功能路由', () => {
       body: JSON.stringify({
         question: '什么是 AVM 项目中心？',
       }),
+      signal: AbortSignal.timeout(15000),
     });
     expect(r.status).toBe(200);
     const result = await r.json();
     expect(result).toBeDefined();
-  });
+  }, 20000);
 });

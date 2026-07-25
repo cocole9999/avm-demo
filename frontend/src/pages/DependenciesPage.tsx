@@ -17,6 +17,7 @@ import {
 import dayjs from 'dayjs';
 import { dependencyApi, projectApi, workItemApi } from '../api';
 import type { Project, WorkItem } from '../types';
+import { notifyApiError } from '../utils/apiError';
 
 const TYPE_META: Record<string, { label: string; color: string; icon: string }> = {
   '台架': { label: '台架', color: 'geekblue', icon: '🛠️' },
@@ -65,8 +66,8 @@ export function DependenciesPage() {
       const [l, s] = await Promise.all([dependencyApi.list(params), dependencyApi.stats()]);
       setList(l);
       setStats(s);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
@@ -123,9 +124,8 @@ export function DependenciesPage() {
       }
       setDrawerOpen(false);
       load();
-    } catch (e: any) {
-      if (e?.errorFields) return;
-      message.error('保存失败：' + (e?.response?.data?.error || e.message));
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 
@@ -140,8 +140,8 @@ export function DependenciesPage() {
       await dependencyApi.ready(d.id);
       message.success(`已标记「${d.name}」为已就绪`);
       load();
-    } catch (e: any) {
-      message.error('操作失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '操作失败：');
     }
   };
 
@@ -162,9 +162,8 @@ export function DependenciesPage() {
         });
         message.success(r.reasoning || 'AI 已补全字段');
       }
-    } catch (e: any) {
-      if (e.errorFields) return;
-      message.error('AI 填充失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, 'AI 填充失败：');
     } finally {
       setAiFilling(false);
     }

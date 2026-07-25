@@ -6,6 +6,7 @@ import { requireAuth, autoRole } from '../middleware/auth';
 import { requireWorkItemOwnership } from '../middleware/ownership';
 import { recordAudit, actorFromReq } from '../utils/audit';
 import { workItemCreateSchema, workItemUpdateSchema } from '../utils/validation';
+import { notifyStatusChange } from '../utils/notifyWatchers';
 
 export const workItemRouter = Router();
 
@@ -276,12 +277,10 @@ workItemRouter.get('/:id', async (req, res) => {
 // POST /api/work-items - 创建
 workItemRouter.post('/', async (req, res) => {
   try {
-    // V1.47: 打印请求体便于调试子任务创建失败
-    console.log('[workItems POST] body:', JSON.stringify(req.body).slice(0, 800));
+    // V1.48: 移除请求体日志（会泄露业务数据到 stdout）
     // P2-2: 输入验证
     const parsed = workItemCreateSchema.safeParse(req.body);
     if (!parsed.success) {
-      console.error('[workItems POST] 验证失败:', parsed.error.issues, 'body:', JSON.stringify(req.body).slice(0, 500));
       return res.status(400).json({ error: '输入验证失败', details: parsed.error.issues });
     }
     const {
@@ -293,11 +292,9 @@ workItemRouter.post('/', async (req, res) => {
     } = parsed.data;
 
   if (!TYPE_OPTIONS.includes(type)) {
-    console.error('[workItems POST] Invalid type:', type, 'body:', JSON.stringify(req.body).slice(0, 300));
     return res.status(400).json({ error: `Invalid type: ${type}` });
   }
   if (!title?.trim()) {
-    console.error('[workItems POST] Title is required, body:', JSON.stringify(req.body).slice(0, 300));
     return res.status(400).json({ error: 'Title is required' });
   }
 
@@ -314,7 +311,6 @@ workItemRouter.post('/', async (req, res) => {
       if (byKey) {
         resolvedParentId = byKey.id;
       } else {
-        console.error('[workItems POST] 父工作项不存在:', resolvedParentId);
         return res.status(400).json({ error: `父工作项不存在: ${resolvedParentId}` });
       }
     }
@@ -506,6 +502,78 @@ workItemRouter.patch('/:id', requireWorkItemOwnership(), async (req, res) => {
           });
         }
       }
+    }
+
+    // V1.50: 通知所有 watchers（关注者）字段变更
+    if (Object.keys(allowed).length > 0) {
+      try {
+        const watchers = await prisma.workItemWatcher.findMany({
+          where: { workItemId: before.id },
+          select: { userId: true, userName: true },
+        });
+        if (watchers.length > 0) {
+          const changedFields = Object.keys(allowed).filter(k => {
+            const o = (before as any)[k];
+            const n = (updated as any)[k];
+            return o !== n;
+          });
+          if (changedFields.length > 0) {
+            // 收集需要通知的人（watchers + assignee + reporter）
+            const recipients = new Set<string>();
+            const recipientNames: Record<string, string> = {};
+            for (const w of watchers) {
+              recipients.add(w.userId);
+              recipientNames[w.userId] = w.userName;
+            }
+            if (updated.assignee) {
+              const a = await prisma.user.findFirst({ where: { displayName: updated.assignee }, select: { id: true, displayName: true } });
+              if (a && !recipients.has(a.id)) { recipients.add(a.id); recipientNames[a.id] = a.displayName; }
+            }
+            if (updated.reporter) {
+              const r = await prisma.user.findFirst({ where: { displayName: updated.reporter }, select: { id: true, displayName: true } });
+              if (r && !recipients.has(r.id)) { recipients.add(r.id); recipientNames[r.id] = r.displayName; }
+            }
+            // 去重：跳过当前操作用户
+            const currentUserId = (req as any).user?.id;
+            const currentUserName = (req as any).user?.displayName;
+            if (currentUserId) recipients.delete(currentUserId);
+            // 写入通知（批量）
+            const actor = req.body.actor || currentUserName || '系统';
+            const title = `关注更新: ${updated.key} ${updated.title.slice(0, 30)}`;
+            const content = `${actor} 更新了字段: ${changedFields.slice(0, 5).join(', ')}${changedFields.length > 5 ? '...' : ''}`;
+            for (const userId of recipients) {
+              await prisma.notification.create({
+                data: {
+                  recipientId: userId,
+                  actorId: currentUserId || null,
+                  type: 'workItem_watched_update',
+                  level: 'info',
+                  title,
+                  content,
+                  resourceType: 'workItem',
+                  resourceId: updated.id,
+                  link: `/work-items/${updated.type}/${updated.id}`,
+                  meta: JSON.stringify({ changedFields, watchersCount: watchers.length }),
+                },
+              });
+            }
+          }
+        }
+      } catch (notifErr: any) {
+        // 通知失败不影响主流程
+        console.warn('[workItems PATCH] watcher notify failed:', notifErr.message);
+      }
+    }
+
+    // V1.52: 状态变更时通过 notifyWatchers 推送 WS + webhook（独立通道，更强语义）
+    if (before.status !== updated.status) {
+      const actorName = req.body.actor || (req as any).user?.displayName || '系统';
+      notifyStatusChange(
+        { id: updated.id, key: updated.key, title: updated.title },
+        { status: before.status },
+        { status: updated.status },
+        actorName,
+      ).catch(e => console.error('[workItems PATCH] notifyStatusChange error:', e.message));
     }
 
     res.json(updated);

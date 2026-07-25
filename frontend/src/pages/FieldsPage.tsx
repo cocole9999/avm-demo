@@ -2,10 +2,13 @@
  * 字段配置中心
  * 公式字段 + 聚合字段 的可视化配置
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, Tabs, Table, Button, Space, Modal, Form, Input, Select, Switch, message, Tag, Tooltip, Popconfirm } from 'antd';
-import { PlusOutlined, FunctionOutlined, CalculatorOutlined, ThunderboltOutlined, ReloadOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { PlusOutlined, FunctionOutlined, CalculatorOutlined, ThunderboltOutlined, ReloadOutlined, DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons';
 import { fieldApi, type FormulaField, type RollupField } from '../api';
+import { notifyApiError } from '../utils/apiError';
+import { useSavedFilters } from '../hooks/useSavedFilters';
+import { SavedFilterButton } from '../components/SavedFilterButton';
 
 const TYPE_OPTIONS = [
   { value: 'requirement', label: '需求' },
@@ -49,6 +52,41 @@ export function FieldsPage() {
   const [editingRollup, setEditingRollup] = useState<RollupField | null>(null);
   const [formulaModalOpen, setFormulaModalOpen] = useState(false);
   const [rollupModalOpen, setRollupModalOpen] = useState(false);
+  // V1.52: 关键词 + 类型筛选
+  const [q, setQ] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string | undefined>();
+
+  // V1.52: 已保存筛选
+  const currentFilters = useMemo(() => ({ q, type: typeFilter || '' }), [q, typeFilter]);
+  const { savedFilters, saveFilter, deleteFilter, shareFilter, cloudError } =
+    useSavedFilters('field-list', currentFilters, { cloudSync: true });
+
+  const filteredFormulas = useMemo(() => {
+    let list = formulas;
+    if (typeFilter) list = list.filter(f => f.workType === typeFilter);
+    if (q.trim()) {
+      const k = q.toLowerCase();
+      list = list.filter(f =>
+        String(f.name || '').toLowerCase().includes(k) ||
+        String(f.fieldKey || '').toLowerCase().includes(k) ||
+        String(f.formula || '').toLowerCase().includes(k),
+      );
+    }
+    return list;
+  }, [formulas, q, typeFilter]);
+
+  const filteredRollups = useMemo(() => {
+    let list = rollups;
+    if (typeFilter) list = list.filter(r => r.workType === typeFilter);
+    if (q.trim()) {
+      const k = q.toLowerCase();
+      list = list.filter(r =>
+        String(r.name || '').toLowerCase().includes(k) ||
+        String(r.fieldKey || '').toLowerCase().includes(k),
+      );
+    }
+    return list;
+  }, [rollups, q, typeFilter]);
 
   const load = async () => {
     setLoading(true);
@@ -69,11 +107,36 @@ export function FieldsPage() {
         items={[
           {
             key: 'formulas',
-            label: <span><FunctionOutlined /> 公式字段（{formulas.length}）</span>,
+            label: <span><FunctionOutlined /> 公式字段（{filteredFormulas.length}）</span>,
             children: (
               <Card
                 extra={
-                  <Space>
+                  <Space wrap>
+                    <Input
+                      placeholder="搜索名称/字段标识/公式" allowClear
+                      prefix={<SearchOutlined />}
+                      style={{ width: 220 }}
+                      value={q} onChange={e => setQ(e.target.value)}
+                    />
+                    <Select
+                      placeholder="适用类型" allowClear
+                      value={typeFilter} onChange={setTypeFilter}
+                      style={{ width: 120 }}
+                      options={TYPE_OPTIONS}
+                    />
+                    {/* V1.52: 已保存筛选 + 团队共享 */}
+                    <SavedFilterButton
+                      currentFilters={currentFilters}
+                      applyFilters={(f) => {
+                        setQ(f.q || '');
+                        setTypeFilter(f.type || undefined);
+                      }}
+                      savedFilters={savedFilters}
+                      onSave={(name, shared) => saveFilter(name, shared)}
+                      onDelete={(id) => deleteFilter(id)}
+                      onShare={(id, shared) => shareFilter(id, shared)}
+                      cloudError={cloudError}
+                    />
                     <Button icon={<ThunderboltOutlined />} onClick={async () => {
                       const r = await fieldApi.recomputeAll();
                       message.success(`重算完成：${r.formulasCount} 公式 + ${r.rollupsCount} 聚合，耗时 ${r.duration}ms`);
@@ -87,7 +150,7 @@ export function FieldsPage() {
                 style={{ borderRadius: 8 }}
               >
                 <Table
-                  dataSource={formulas}
+                  dataSource={filteredFormulas}
                   rowKey="id"
                   loading={loading}
                   pagination={false}
@@ -121,7 +184,7 @@ export function FieldsPage() {
           },
           {
             key: 'rollups',
-            label: <span><CalculatorOutlined /> 聚合字段（{rollups.length}）</span>,
+            label: <span><CalculatorOutlined /> 聚合字段（{filteredRollups.length}）</span>,
             children: (
               <Card
                 extra={
@@ -202,7 +265,7 @@ function FormulaModal({ open, field, onClose, onSaved }: { open: boolean; field:
     try {
       const r = await fieldApi.testFormula(formula, sample);
       setTestResult(r.value);
-    } catch (e: any) { message.error('公式错误：' + e.message); }
+    } catch (e) { notifyApiError(e, '公式错误：'); }
   };
 
   const insertAtCursor = (text: string) => {

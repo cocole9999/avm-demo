@@ -8,6 +8,8 @@
  */
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ConfigProvider, theme as antdTheme, App as AntdApp } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
 import App from './App';
 import { LoginPage } from './pages/LoginPage';
 import { WorkbenchPage } from './pages/WorkbenchPage';
@@ -15,6 +17,7 @@ import { WorkItemsPage } from './pages/WorkItemsPage';
 import { WorkItemDetailPage } from './pages/WorkItemDetailPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { useAuth } from './AuthContext';
+import { ThemeProvider, useThemeMode } from './ThemeContext';
 
 // 懒加载低频页面（首屏之外用到的才加载）
 const FlowsPage = lazy(() => import('./pages/FlowsPage').then(m => ({ default: m.FlowsPage })));
@@ -45,12 +48,87 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })));
 const ImportWizardPage = lazy(() => import('./pages/ImportWizardPage').then(m => ({ default: m.ImportWizardPage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
+const WatchingPage = lazy(() => import('./pages/WatchingPage').then(m => ({ default: m.WatchingPage })));
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { user } = useAuth();
   const location = useLocation();
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   return children;
+}
+
+// V1.50: 暗色主题 — ConfigProvider 应用 antd darkAlgorithm
+function ThemedApp() {
+  const { isDark } = useThemeMode();
+  return (
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        token: {
+          colorPrimary: '#1677ff',
+        },
+      }}
+    >
+      <AntdApp>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <App />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/workbench" replace />} />
+                <Route path="workbench" element={<WorkbenchPage />} />
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="work-items/:type" element={<WorkItemsPage />} />
+                <Route path="work-items/:type/:id" element={<WorkItemDetailPage />} />
+                <Route path="flows" element={<FlowsPage />} />
+                <Route path="flows/:id" element={<FlowEditorPage />} />
+                <Route path="reviews" element={<ReviewsPage />} />
+                <Route path="reviews/:id" element={<ReviewDetailPage />} />
+                <Route path="dashboards" element={<DashboardsPage />} />
+                <Route path="dashboards/:id" element={<DashboardDetailPage />} />
+                <Route path="charts/new" element={<ChartEditorPage />} />
+                <Route path="charts/:id" element={<ChartEditorPage />} />
+                <Route path="ai" element={<AIPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="resources" element={<ResourcesPage />} />
+                <Route path="tree" element={<TreeViewPage />} />
+                <Route path="tree/:type" element={<TreeViewPage />} />
+                <Route path="fields" element={<FieldsPage />} />
+                <Route path="automation" element={<AutomationPage />} />
+                <Route path="analysis" element={<AnalysisPage />} />
+                <Route path="baselines" element={<BaselinePage />} />
+                <Route path="mcp" element={<MCPPage />} />
+                <Route path="tests" element={<TestPage />} />
+                <Route path="tenants" element={<TenantPage />} />
+                <Route path="llm-settings" element={<LLMSettingsPage />} />
+                <Route path="customers" element={<CustomerPage />} />
+                <Route path="car-models" element={<CarModelPage />} />
+                <Route path="projects" element={<ProjectPage />} />
+                <Route path="dependencies" element={<DependenciesPage />} />
+                <Route path="gantt" element={<GanttPage />} />
+                <Route path="users" element={<UsersPage />} />
+                <Route path="audit-logs" element={<AuditLogsPage />} />
+                <Route path="imports" element={<ImportWizardPage />} />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="watching" element={<WatchingPage />} />
+                {/* V1.48: 404 兜底路由 */}
+                <Route path="*" element={<NotFoundPage />} />
+              </Route>
+            </Routes>
+          </Suspense>
+        </BrowserRouter>
+      </AntdApp>
+    </ConfigProvider>
+  );
 }
 
 // 懒加载 fallback（防止切换路由白屏）
@@ -67,56 +145,8 @@ function PageLoader() {
 
 export default function Root() {
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <App />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Navigate to="/workbench" replace />} />
-            <Route path="workbench" element={<WorkbenchPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="work-items/:type" element={<WorkItemsPage />} />
-            <Route path="work-items/:type/:id" element={<WorkItemDetailPage />} />
-            <Route path="flows" element={<FlowsPage />} />
-            <Route path="flows/:id" element={<FlowEditorPage />} />
-            <Route path="reviews" element={<ReviewsPage />} />
-            <Route path="reviews/:id" element={<ReviewDetailPage />} />
-            <Route path="dashboards" element={<DashboardsPage />} />
-            <Route path="dashboards/:id" element={<DashboardDetailPage />} />
-            <Route path="charts/new" element={<ChartEditorPage />} />
-            <Route path="charts/:id" element={<ChartEditorPage />} />
-            <Route path="ai" element={<AIPage />} />
-            <Route path="notifications" element={<NotificationsPage />} />
-            <Route path="resources" element={<ResourcesPage />} />
-            <Route path="tree" element={<TreeViewPage />} />
-            <Route path="tree/:type" element={<TreeViewPage />} />
-            <Route path="fields" element={<FieldsPage />} />
-            <Route path="automation" element={<AutomationPage />} />
-            <Route path="analysis" element={<AnalysisPage />} />
-            <Route path="baselines" element={<BaselinePage />} />
-            <Route path="mcp" element={<MCPPage />} />
-            <Route path="tests" element={<TestPage />} />
-            <Route path="tenants" element={<TenantPage />} />
-            <Route path="llm-settings" element={<LLMSettingsPage />} />
-            <Route path="customers" element={<CustomerPage />} />
-            <Route path="car-models" element={<CarModelPage />} />
-            <Route path="projects" element={<ProjectPage />} />
-            <Route path="dependencies" element={<DependenciesPage />} />
-            <Route path="gantt" element={<GanttPage />} />
-            <Route path="users" element={<UsersPage />} />
-            <Route path="audit-logs" element={<AuditLogsPage />} />
-            <Route path="imports" element={<ImportWizardPage />} />
-            <Route path="reports" element={<ReportsPage />} />
-          </Route>
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <ThemeProvider>
+      <ThemedApp />
+    </ThemeProvider>
   );
 }

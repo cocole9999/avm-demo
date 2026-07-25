@@ -47,6 +47,8 @@ import { auditLogRouter } from './routes/auditLogs';
 import { mentionRouter } from './routes/mentions';
 import { uploadRouter } from './routes/uploads';
 import { fileUploadRouter } from './routes/upload';
+import { watchRouter } from './routes/watch';
+import { savedFilterRouter } from './routes/savedFilters';
 import { healthRouter } from './routes/health';
 import { helmetMiddleware, globalLimiter } from './middleware/security';
 import { csrfProtection, getCsrfToken } from './middleware/csrf';
@@ -56,6 +58,7 @@ import { metricsMiddleware, metricsHandler } from './utils/metrics';
 import { prisma } from './db';
 import morgan from 'morgan';
 import { attachWsServer, getStats, pushToUser, broadcastAll, pushToRole } from './services/wsServer';
+import { mountSwagger } from './swagger';
 import http from 'http';
 
 const app = express();
@@ -118,6 +121,14 @@ if (process.env.ENABLE_CSRF_PROTECTION === 'true') {
   app.use('/api', csrfProtection);
 }
 
+// V1.46.1: Swagger API 文档 (在 requireAuth 之前挂载, 免鉴权访问)
+// 生产环境可通过 ENABLE_API_DOCS=false 关闭
+if (process.env.ENABLE_API_DOCS !== 'false') {
+  mountSwagger(app);
+}
+
+// V1.50: watchRouter 必须先挂载，否则 `/api/work-items/watching/me` 会被 workItemRouter 的 `/:id` 拦截
+app.use('/api/work-items', watchRouter);
 app.use('/api/work-items', workItemRouter);
 app.use('/api/iterations', iterationRouter);
 app.use('/api/comments', commentRouter);
@@ -160,6 +171,7 @@ app.use('/api/audit-logs', auditLogRouter);
 app.use('/api/mentions', mentionRouter);
 app.use('/api/uploads', uploadRouter);
 app.use('/api/upload', fileUploadRouter);
+app.use('/api/saved-filters', savedFilterRouter);
 
 // V1.30.3 P2-8: Sentry error handler（在自定义错误处理之前）
 app.use(sentryErrorHandler());

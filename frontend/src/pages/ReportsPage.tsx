@@ -21,6 +21,7 @@ import DOMPurify from 'dompurify';
 import dayjs, { Dayjs } from 'dayjs';
 import { aiApi, userApi, projectApi } from '../api';
 import { downloadBlob } from '../utils/download';
+import { notifyApiError } from '../utils/apiError';
 
 // 配置 marked — 启用 GFM, 表格/任务列表
 marked.setOptions({ gfm: true, breaks: false });
@@ -126,8 +127,8 @@ export function ReportsPage() {
       setData(r);
       setRawMd(r.report);
       message.success(`报告生成完成 ${r.llmModel ? '(AI 润色)' : '(模板)'}`);
-    } catch (e: any) {
-      message.error('生成失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '生成失败：');
     } finally {
       setLoading(false);
     }

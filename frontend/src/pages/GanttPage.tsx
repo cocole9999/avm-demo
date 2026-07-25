@@ -25,6 +25,7 @@ import { useAuth } from '../AuthContext';
 import { BurndownChart } from '../components/BurndownChart';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { useWorkItemChanged } from '../services/useWorkItemChanged';
+import { notifyApiError } from '../utils/apiError';
 
 type Scale = 'day' | 'week' | 'month';
 const SCALE_PX: Record<Scale, number> = { day: 40, week: 22, month: 12 };
@@ -106,8 +107,8 @@ export function GanttPage() {
     try {
       const data = await iterationApi.retrospective(retroIteration);
       setRetroData(data);
-    } catch (e: any) {
-      message.error('生成回顾失败: ' + e.message);
+    } catch (e) {
+      notifyApiError(e, '生成回顾失败：');
     } finally {
       setRetroLoading(false);
     }
@@ -159,8 +160,8 @@ export function GanttPage() {
         })),
       } as unknown as { projects: GanttProject[]; items: GanttItem[]; relations?: GanttRelation[]; summary: any; dateRange: { from: string; to: string } };
       setData(transformedData);
-    } catch (e: any) {
-      message.error('加载失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '加载失败：');
     } finally {
       setLoading(false);
     }
@@ -227,13 +228,13 @@ export function GanttPage() {
           actor: user?.displayName || '我',
         } as any);
         message.success(`✓ ${cur.item.key} 排期已更新`);
-      } catch (e: any) {
+      } catch (e) {
         // 回滚
         setData(d => d ? {
           ...d,
           items: d.items.map(x => x.id === cur.id ? orig : x),
         } : d);
-        message.error('保存失败：' + e.message);
+        notifyApiError(e, '保存失败：');
       }
     };
 
@@ -266,9 +267,8 @@ export function GanttPage() {
       message.success(`✓ ${editingItem.key} 排期已更新`);
       setEditingItem(null);
       load();
-    } catch (e: any) {
-      if (e.errorFields) return; // 校验失败
-      message.error('保存失败：' + e.message);
+    } catch (e) {
+      notifyApiError(e, '保存失败：');
     }
   };
 

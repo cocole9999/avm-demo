@@ -10,6 +10,7 @@ import { prisma } from '../db';
 import { requireAuth, AuthedRequest } from '../middleware/auth';
 import { recordAudit, actorFromReq } from '../utils/audit';
 import { parseMentions, resolveMentions, notifyMentions } from '../utils/mentions';
+import { notifyNewComment } from '../utils/notifyWatchers';
 
 export const commentRouter = Router();
 
@@ -73,6 +74,18 @@ commentRouter.post('/', async (req: AuthedRequest, res) => {
         );
         mentionCount = resolved.length;
       }
+    }
+    // V1.52: 通知所有关注者（排除评论作者自己）
+    const wiForWatcher = await prisma.workItem.findUnique({
+      where: { id: workItemId },
+      select: { id: true, key: true, title: true },
+    });
+    if (wiForWatcher) {
+      notifyNewComment(
+        { id: comment.id, workItemId, author: finalAuthor, content: (content || '').trim(), imageUrl: imageUrl || null },
+        wiForWatcher,
+        finalAuthor,
+      ).catch(e => console.error('[comments POST] notifyNewComment error:', e.message));
     }
     recordAudit('workItem', workItemId, 'update', null, { method: 'POST', summary: `${finalAuthor} 评论 (提及 ${mentionCount} 人)` }, actorFromReq(req));
     res.status(201).json({ ...comment, mentionCount });
