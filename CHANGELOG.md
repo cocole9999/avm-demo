@@ -2,6 +2,19 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.10] - 2026-07-26
+
+### AI 助理悬浮按钮移至 Sider Logo 左侧
+
+#### 变更
+- **AI 按钮位置** — 从右下角 56x56 悬浮按钮改为 Sider 头部 Logo 左侧的 28x28 紧凑按钮
+- **按钮样式** — 已配置 LLM 时显示紫蓝渐变 + boxShadow，未配置时显示灰色
+- **数字徽章** — Badge 显示用户消息数（通过 sessionStorage 轮询同步 GlobalAIAssistant 的历史）
+- **LLM 状态指示** — Tooltip 提示"AI 助理 (Ctrl+K) — 已就绪/未配置 LLM"
+- **快捷键** — Ctrl+K 唤起/关闭全局 AI 助理（原 Ctrl+K 行为保留到新按钮）
+- **布局适配** — Sider 头部从居中改为左对齐，padding：折叠 8px，展开 16px；标题过长省略
+- **GlobalAIAssistant 改造** — 新增 `props.open / onOpenChange / hideFloatButton`，支持外部控制 Drawer 开关和隐藏内置 FloatButton
+
 ## [V1.55.9] - 2026-07-26
 
 ### AI Agent 系统 5 项 bug 修复

@@ -229,14 +229,28 @@ function useSpeechRecognition(onInterim: (text: string) => void, onFinal: (text:
   return { listening, interimText, start, stop, isSupported };
 }
 
-export function GlobalAIAssistant() {
+export interface GlobalAIAssistantProps {
+  /** V1.55.10: 外部控制 open 状态（由 App.tsx 的 Logo 旁按钮控制） */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** V1.55.10: 隐藏内置 FloatButton（已由外部按钮替代） */
+  hideFloatButton?: boolean;
+}
+
+export function GlobalAIAssistant(props: GlobalAIAssistantProps = {}) {
+  const { open: externalOpen, onOpenChange, hideFloatButton } = props;
   const { user } = useAuth();
   const username = user?.displayName || user?.username || 'guest';
   const location = useLocation();
   const navigate = useNavigate();
   // V1.50: 当前页面路径（注入到 LLM context，让 LLM 知道用户在哪个页面）
   const currentPath = location.pathname;
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen ?? internalOpen;
+  const setOpen = (v: boolean) => {
+    setInternalOpen(v);
+    onOpenChange?.(v);
+  };
   const [messages, setMessages] = useState<Message[]>(() => {
     const saved = loadHistory(username);
     if (saved.length > 0) return saved;
@@ -664,16 +678,19 @@ export function GlobalAIAssistant() {
 
   return (
     <>
-      <Badge count={messageCount} size="small" offset={[-8, 8]} color="#722ed1">
-        <FloatButton
-          type="primary"
-          icon={<span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>AI</span>}
-          tooltip="AI 助理 (Ctrl+K)"
-          style={{ right: 24, bottom: 24, width: 56, height: 56 }}
-          onClick={() => setOpen(true)}
-          aria-label="打开 AI 助理"
-        />
-      </Badge>
+      {/* V1.55.10: 隐藏内置 FloatButton（已由 App.tsx 的 Logo 旁按钮替代） */}
+      {!hideFloatButton && (
+        <Badge count={messageCount} size="small" offset={[-8, 8]} color="#722ed1">
+          <FloatButton
+            type="primary"
+            icon={<span style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>AI</span>}
+            tooltip="AI 助理 (Ctrl+K)"
+            style={{ right: 24, bottom: 24, width: 56, height: 56 }}
+            onClick={() => setOpen(true)}
+            aria-label="打开 AI 助理"
+          />
+        </Badge>
+      )}
 
       <Drawer
         title={

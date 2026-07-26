@@ -32,6 +32,10 @@ export default function App() {
   const [currentSpace, setCurrentSpace] = useState<SpaceType | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [searchQ, setSearchQ] = useState('');
+  // V1.55.10: 全局 AI 助理状态（由 Logo 旁按钮控制）
+  const [globalAIAssistantOpen, setGlobalAIAssistantOpen] = useState(false);
+  const [hasConfiguredLlm, setHasConfiguredLlm] = useState(false);
+  const [globalMessageCount, setGlobalMessageCount] = useState(0);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   // V1.50: NL 搜索（自然语言 → 筛选条件 + 跳转）
   const [nlMode, setNlMode] = useState(false);
@@ -61,6 +65,34 @@ export default function App() {
     const refreshNotifs = () => notificationApi.unreadCount(CURRENT_USER).then(r => setUnreadCount(r.count)).catch(() => {});
     refreshNotifs();
     const t = setInterval(refreshNotifs, 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  // V1.55.10: 加载 LLM 配置状态（用于 Logo 旁 AI 按钮的样式）
+  useEffect(() => {
+    if (!authToken) {
+      setHasConfiguredLlm(false);
+      return;
+    }
+    const loadLlm = () => aiApi.llmStatus()
+      .then((r: any) => setHasConfiguredLlm(!!r?.configured))
+      .catch(() => setHasConfiguredLlm(false));
+    loadLlm();
+    const t = setInterval(loadLlm, 60000);
+    return () => clearInterval(t);
+  }, [authToken]);
+
+  // V1.55.10: 监听 sessionStorage 同步 GlobalAIAssistant 的消息数
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        const raw = sessionStorage.getItem('avm-global-ai-history') || sessionStorage.getItem('avm-ai-history') || '[]';
+        const arr = JSON.parse(raw);
+        setGlobalMessageCount(Array.isArray(arr) ? arr.filter((m: any) => m.role === 'user').length : 0);
+      } catch { setGlobalMessageCount(0); }
+    };
+    refresh();
+    const t = setInterval(refresh, 2000);
     return () => clearInterval(t);
   }, []);
 
@@ -126,6 +158,12 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U') && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         agentPanel.togglePanel();
+        return;
+      }
+      // V1.55.10: Ctrl+K 唤起/关闭全局 AI 助理
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K') && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setGlobalAIAssistantOpen(v => !v);
         return;
       }
       // 修饰键: 不响应 (留给浏览器)
@@ -429,13 +467,33 @@ export default function App() {
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light" width={232} aria-label="主导航侧边栏" role="navigation" style={{ height: '100vh', overflow: 'hidden' }}>
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{
-          height: 56, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          height: 56, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
           borderBottom: `1px solid ${themeToken.colorBorderSecondary}`,
-          gap: 8, flexShrink: 0,
+          gap: 8, flexShrink: 0, paddingLeft: collapsed ? 8 : 16, paddingRight: collapsed ? 8 : 16,
         }}>
-          <RocketOutlined style={{ fontSize: 22, color: themeToken.colorPrimary }} />
+          {/* V1.55.10: AI 助理悬浮按钮（缩小放在 Logo 左侧） */}
+          <Tooltip title={`AI 助理 (Ctrl+K) — ${hasConfiguredLlm ? '已就绪' : '未配置 LLM'}`}>
+            <Badge count={globalMessageCount} size="small" offset={[-2, 2]} color="#722ed1">
+              <Button
+                type="text"
+                size="small"
+                onClick={() => setGlobalAIAssistantOpen(true)}
+                style={{
+                  width: 28, height: 28, minWidth: 28, padding: 0, flexShrink: 0,
+                  background: hasConfiguredLlm ? 'linear-gradient(135deg, #1677ff 0%, #722ed1 100%)' : '#f0f0f0',
+                  color: hasConfiguredLlm ? '#fff' : '#999',
+                  border: 'none',
+                  boxShadow: hasConfiguredLlm ? '0 2px 6px rgba(22,119,255,0.3)' : 'none',
+                }}
+                aria-label="打开 AI 助理"
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1 }}>AI</span>
+              </Button>
+            </Badge>
+          </Tooltip>
+          <RocketOutlined style={{ fontSize: 22, color: themeToken.colorPrimary, flexShrink: 0 }} />
           {!collapsed && (
-            <span style={{ fontSize: 16, fontWeight: 600 }}>AVM 项目中心</span>
+            <span style={{ fontSize: 16, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>AVM 项目中心</span>
           )}
         </div>
 
@@ -737,8 +795,12 @@ export default function App() {
           <AgentPane />
         </Content>
       </Layout>
-      {/* 全局 AI 助理：悬浮按钮 + Ctrl+K 唤起，跨页面可用 */}
-      <GlobalAIAssistant />
+      {/* V1.55.10: 全局 AI 助理 — 悬浮按钮已移到 Logo 左侧, 由 external open 控制 */}
+      <GlobalAIAssistant
+        open={globalAIAssistantOpen}
+        onOpenChange={setGlobalAIAssistantOpen}
+        hideFloatButton
+      />
 
       {/* V1.55.5: 选区动作按钮（选中文本时弹出"问 AI"） */}
       <InlineAskButton />
