@@ -75,6 +75,7 @@ function ThemedApp() {
     >
       <AntdApp>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <AgentPanelProvider>
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -129,6 +130,7 @@ function ThemedApp() {
               </Route>
             </Routes>
           </Suspense>
+          </AgentPanelProvider>
         </BrowserRouter>
       </AntdApp>
     </ConfigProvider>
