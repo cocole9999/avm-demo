@@ -32,6 +32,21 @@ import { agentsApi, agentSessionsApi, type Agent as AgentType, type AgentSession
 const { useToken } = theme;
 const { TextArea } = Input;
 
+// V1.55.13: kbd 标签样式（用于空状态快捷键提示）
+const kbdStyle: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '1px 6px',
+  borderRadius: 4,
+  border: '1px solid var(--ant-color-border, #d9d9d9)',
+  background: 'var(--ant-color-bg-container, #fff)',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  fontSize: 11,
+  lineHeight: '14px',
+  color: 'var(--ant-color-text-secondary, #666)',
+  boxShadow: '0 1px 0 var(--ant-color-border-secondary, #f0f0f0)',
+  margin: '0 2px',
+};
+
 // V1.55.7: 6 个专用 Agent 图标设计（圆形彩色背景 + 居中 antd 图标）
 // 视觉更专业、辨识度更高，与侧边栏导航风格一致
 function agentIconNode(key: string, emoji: string, size: number = 14, badge: boolean = false): React.ReactNode {
@@ -84,6 +99,19 @@ function agentIconNode(key: string, emoji: string, size: number = 14, badge: boo
       {item.icon}
     </span>
   );
+}
+
+// V1.55.13: 获取 Agent 的主题色（用于空状态大头像背景）
+function agentColor(key: string): { bg: string; fg: string; shadow: string } {
+  const map: Record<string, { bg: string; fg: string; shadow: string }> = {
+    general:  { bg: '#e6f4ff', fg: '#1677ff', shadow: 'rgba(22,119,255,0.18)' },
+    project:  { bg: '#e6fffb', fg: '#13c2c2', shadow: 'rgba(19,194,194,0.18)' },
+    workItem: { bg: '#fff7e6', fg: '#fa8c16', shadow: 'rgba(250,140,22,0.18)' },
+    report:   { bg: '#f9f0ff', fg: '#722ed1', shadow: 'rgba(114,46,209,0.18)' },
+    risk:     { bg: '#fff1f0', fg: '#f5222d', shadow: 'rgba(245,34,45,0.18)' },
+    review:   { bg: '#f6ffed', fg: '#52c41a', shadow: 'rgba(82,196,26,0.18)' },
+  };
+  return map[key] || { bg: '#e6f4ff', fg: '#1677ff', shadow: 'rgba(22,119,255,0.18)' };
 }
 
 function pageNameFromPath(path: string): string {
@@ -229,46 +257,32 @@ export function AgentPane() {
       overflow: 'hidden',
       minHeight: 0,
     }}>
-      {/* 顶部：标题 + 工具（一行紧凑布局） */}
+      {/* V1.55.13: 顶部栏 — 紧凑、单行、去掉冗余 Agent 徽章 */}
       <div style={{
-        padding: '8px 10px',
+        padding: '10px 12px',
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
-        background: token.colorBgLayout,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         flexShrink: 0,
         minWidth: 0,
-        overflow: 'hidden',
       }}>
-        <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 16, flexShrink: 0 }} />
-        {width >= 320 && <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>AI 助理</span>}
-        {activeAgent && width >= 360 && (
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '2px 8px 2px 2px',
-            borderRadius: 12,
-            background: token.colorFillTertiary,
-            fontSize: 12,
-            fontWeight: 500,
-            flexShrink: 0,
-            maxWidth: 140,
-            overflow: 'hidden',
-          }}>
-            {agentIconNode(activeAgent.key, activeAgent.icon, 12, true)}
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeAgent.name}</span>
-          </div>
-        )}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '4px 10px', borderRadius: 8,
+          background: `linear-gradient(135deg, ${token.colorPrimaryBg} 0%, ${token.colorBgContainer} 100%)`,
+          border: `1px solid ${token.colorBorderSecondary}`,
+          flexShrink: 0,
+        }}>
+          <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 14 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>AI 助理</span>
+        </div>
         <div style={{ flex: 1, minWidth: 0 }} />
-        {/* V1.55.3: 模型选择器（窄面板时隐藏） */}
-        {width >= 380 && (
-          <div style={{ flexShrink: 0, minWidth: 0 }}>
+        {width >= 360 && (
+          <div style={{ flexShrink: 0 }}>
             <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
           </div>
         )}
-        {/* V1.55.5: 会话历史菜单 */}
         <SessionMenu
           agentId={activeAgent?.id}
           currentSessionId={panel.sessionId}
@@ -298,58 +312,123 @@ export function AgentPane() {
         </Dropdown>
       </div>
 
-      {/* Agent 切换 Tab */}
+      {/* V1.55.13: Agent 切换 — Segmented 风格 chip（精致、悬停过渡） */}
       <div style={{
         padding: '8px 12px',
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
         display: 'flex',
-        gap: 6,
+        gap: 4,
         overflowX: 'auto',
+        background: token.colorBgLayout,
       }}>
         {loadingAgents ? (
           <Spin size="small" />
         ) : (
-          agents.filter(a => a.enabled).map(a => (
-            <Tooltip key={a.key} title={a.description}>
-              <Button
-                size="small"
-                type={panel.activeAgentKey === a.key ? 'primary' : 'default'}
-                onClick={() => panel.setActiveAgentKey(a.key)}
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                {agentIconNode(a.key, a.icon, 13, true)}
-                <span>{a.name}</span>
-              </Button>
-            </Tooltip>
-          ))
+          agents.filter(a => a.enabled).map(a => {
+            const isActive = panel.activeAgentKey === a.key;
+            const c = agentColor(a.key);
+            return (
+              <Tooltip key={a.key} title={a.description} mouseEnterDelay={0.4}>
+                <div
+                  onClick={() => panel.setActiveAgentKey(a.key)}
+                  className="avm-agent-chip"
+                  data-active={isActive ? '1' : '0'}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 11px 5px 7px',
+                    borderRadius: 14,
+                    background: isActive ? c.bg : 'transparent',
+                    color: isActive ? c.fg : token.colorTextSecondary,
+                    fontSize: 12,
+                    fontWeight: isActive ? 600 : 400,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    transition: 'all 0.18s ease',
+                    border: isActive ? `1px solid ${c.fg}30` : '1px solid transparent',
+                    userSelect: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isActive) {
+                      (e.currentTarget as HTMLDivElement).style.background = token.colorFillTertiary;
+                      (e.currentTarget as HTMLDivElement).style.color = token.colorText;
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) {
+                      (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                      (e.currentTarget as HTMLDivElement).style.color = token.colorTextSecondary;
+                    }
+                  }}
+                >
+                  {agentIconNode(a.key, a.icon, 12, !isActive)}
+                  <span>{a.name}</span>
+                </div>
+              </Tooltip>
+            );
+          })
         )}
       </div>
 
-      {/* 消息区 */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12, background: token.colorBgLayout }}>
+      {/* V1.55.13: 消息区 — 精致气泡 + 优雅空状态 */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16, background: token.colorBgLayout }}>
         {messages.length === 0 ? (
           <div style={{
-            minHeight: '100%', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'flex-start',
-            paddingTop: 60,
-            color: token.colorTextTertiary, fontSize: 13, textAlign: 'center',
+            minHeight: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            paddingTop: 72,
           }}>
-            <RobotOutlined style={{ fontSize: 32, marginBottom: 12, color: token.colorPrimary }} />
-            <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {activeAgent && agentIconNode(activeAgent.key, activeAgent.icon, 18, true)}
-              <span style={{ fontSize: 14, fontWeight: 500 }}>{activeAgent ? activeAgent.name : 'AI 助理'}</span>
+            {/* 大圆头像（带主题色阴影） */}
+            {activeAgent ? (() => {
+              const c = agentColor(activeAgent.key);
+              return (
+                <div style={{
+                  width: 72, height: 72,
+                  borderRadius: 20,
+                  background: `linear-gradient(135deg, ${c.bg} 0%, #ffffff 100%)`,
+                  border: `1px solid ${c.fg}20`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: 18,
+                  boxShadow: `0 6px 20px ${c.shadow}`,
+                }}>
+                  {agentIconNode(activeAgent.key, activeAgent.icon, 30, true)}
+                </div>
+              );
+            })() : (
+              <div style={{
+                width: 72, height: 72,
+                borderRadius: 20,
+                background: `linear-gradient(135deg, ${token.colorPrimaryBg} 0%, #ffffff 100%)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 18,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
+              }}>
+                <RobotOutlined style={{ fontSize: 32, color: token.colorPrimary }} />
+              </div>
+            )}
+            {/* 标题 + 描述 */}
+            <div style={{ fontSize: 16, fontWeight: 600, color: token.colorText, marginBottom: 8, letterSpacing: 0.2 }}>
+              {activeAgent ? activeAgent.name : 'AI 助理'}
             </div>
-            <div style={{ fontSize: 12, color: token.colorTextQuaternary, maxWidth: 280, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 13, color: token.colorTextTertiary, maxWidth: 280, textAlign: 'center', lineHeight: 1.7, marginBottom: 22 }}>
               {activeAgent?.description || '选择 Agent 后开始对话'}
             </div>
-            <div style={{ marginTop: 16, fontSize: 11, color: token.colorTextQuaternary, lineHeight: 1.6 }}>
-              当前页面：{pageContext.pageName}
-              <br />
-              按 <kbd>Enter</kbd> 发送，<kbd>Shift+Enter</kbd> 换行
+            {/* 分隔线 */}
+            <div style={{ width: 36, height: 2, borderRadius: 1, background: token.colorBorderSecondary, marginBottom: 22 }} />
+            {/* 快捷键提示 */}
+            <div style={{ fontSize: 12, color: token.colorTextQuaternary, textAlign: 'center', lineHeight: 1.9 }}>
+              <div>当前页面：<span style={{ color: token.colorTextTertiary }}>{pageContext.pageName}</span></div>
+              <div style={{ marginTop: 6 }}>
+                按 <kbd style={kbdStyle}>Enter</kbd> 发送，<kbd style={kbdStyle}>Shift+Enter</kbd> 换行
+              </div>
             </div>
           </div>
         ) : (
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
             {messages.map(m => (
               <div
                 key={m.id}
@@ -360,30 +439,31 @@ export function AgentPane() {
               >
                 <div
                   style={{
-                    maxWidth: '90%',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    background: m.role === 'user' ? token.colorPrimaryBg : token.colorBgContainer,
-                    color: m.role === 'user' ? token.colorPrimaryText : token.colorText,
+                    maxWidth: '92%',
+                    padding: '9px 13px',
+                    borderRadius: 10,
+                    background: m.role === 'user' ? token.colorPrimary : token.colorBgContainer,
+                    color: m.role === 'user' ? '#fff' : token.colorText,
                     border: m.role === 'ai' ? `1px solid ${token.colorBorderSecondary}` : 'none',
                     fontSize: 13,
-                    lineHeight: 1.6,
+                    lineHeight: 1.65,
                     wordBreak: 'break-word',
+                    boxShadow: m.role === 'user' ? `0 2px 8px ${token.colorPrimary}30` : '0 1px 2px rgba(0,0,0,0.04)',
                   }}
                 >
                   {/* 工具调用记录 */}
                   {m.toolCalls && m.toolCalls.length > 0 && (
                     <details style={{ marginBottom: 6, fontSize: 11, opacity: 0.85 }}>
-                      <summary style={{ cursor: 'pointer', color: token.colorTextSecondary }}>
+                      <summary style={{ cursor: 'pointer', color: m.role === 'user' ? 'rgba(255,255,255,0.85)' : token.colorTextSecondary }}>
                         <ToolOutlined /> 调用了 {m.toolCalls.length} 个工具
                       </summary>
-                      <div style={{ marginTop: 4, paddingLeft: 8, borderLeft: `2px solid ${token.colorBorderSecondary}` }}>
+                      <div style={{ marginTop: 4, paddingLeft: 8, borderLeft: `2px solid ${m.role === 'user' ? 'rgba(255,255,255,0.3)' : token.colorBorderSecondary}` }}>
                         {m.toolCalls.map((tc, i) => (
                           <div key={i} style={{ marginBottom: 4 }}>
                             <Tag color={tc.error ? 'red' : 'green'} style={{ fontSize: 10 }}>
                               {tc.error ? '✗' : '✓'} {tc.name}
                             </Tag>
-                            {tc.error && <span style={{ color: token.colorError, fontSize: 11 }}> {tc.error}</span>}
+                            {tc.error && <span style={{ color: m.role === 'user' ? '#ffd6d6' : token.colorError, fontSize: 11 }}> {tc.error}</span>}
                           </div>
                         ))}
                       </div>
@@ -391,7 +471,7 @@ export function AgentPane() {
                   )}
                   {/* 消息内容（Markdown 渲染） */}
                   {m.pending ? (
-                    <span style={{ color: token.colorTextTertiary }}>
+                    <span style={{ color: m.role === 'user' ? 'rgba(255,255,255,0.85)' : token.colorTextTertiary }}>
                       <Spin size="small" style={{ marginRight: 6 }} />
                       思考中…
                     </span>
@@ -409,7 +489,7 @@ export function AgentPane() {
                   ) : (
                     <span style={{ whiteSpace: 'pre-wrap' }}>{m.content}</span>
                   )}
-                  <div style={{ fontSize: 10, color: token.colorTextTertiary, marginTop: 4, textAlign: m.role === 'user' ? 'right' : 'left' }}>
+                  <div style={{ fontSize: 10, color: m.role === 'user' ? 'rgba(255,255,255,0.65)' : token.colorTextTertiary, marginTop: 4, textAlign: m.role === 'user' ? 'right' : 'left' }}>
                     {m.time}
                   </div>
                 </div>
@@ -420,22 +500,30 @@ export function AgentPane() {
         )}
       </div>
 
-      {/* 底部输入框 */}
+      {/* V1.55.13: 底部输入区 — 圆角容器 + 精致按钮 + 简洁提示 */}
       <div style={{
-        padding: 12,
+        padding: 10,
         borderTop: `1px solid ${token.colorBorderSecondary}`,
         background: token.colorBgContainer,
         flexShrink: 0,
         flexGrow: 0,
-        boxShadow: `0 -2px 8px ${token.colorBorderSecondary}40`,
       }}>
         <div style={{
-          border: `1.5px solid ${token.colorBorderSecondary}`,
-          borderRadius: 10,
+          border: `1px solid ${token.colorBorderSecondary}`,
+          borderRadius: 12,
           padding: 2,
           background: token.colorBgContainer,
-          transition: 'border-color 0.2s, box-shadow 0.2s',
-        }}>
+          transition: 'all 0.2s',
+        }}
+        onFocusCapture={e => {
+          (e.currentTarget as HTMLDivElement).style.borderColor = token.colorPrimary;
+          (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 0 3px ${token.colorPrimaryBg}`;
+        }}
+        onBlurCapture={e => {
+          (e.currentTarget as HTMLDivElement).style.borderColor = token.colorBorderSecondary;
+          (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
+        }}
+        >
           <TextArea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -444,10 +532,10 @@ export function AgentPane() {
             autoSize={{ minRows: 2, maxRows: 6 }}
             disabled={!activeAgent || loading}
             variant="borderless"
-            style={{ padding: '6px 8px', fontSize: 13, resize: 'none' }}
+            style={{ padding: '8px 10px', fontSize: 13, resize: 'none' }}
           />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '0 2px' }}>
           <span style={{ fontSize: 11, color: token.colorTextTertiary, flex: 1 }}>
             {activeAgent ? `${activeAgent.allowedTools?.length || 0} 个工具可用 · Enter 发送 · Shift+Enter 换行` : '请先选择 Agent'}
           </span>
@@ -468,6 +556,7 @@ export function AgentPane() {
               icon={<SendOutlined />}
               onClick={handleSend}
               disabled={!input.trim() || !activeAgent}
+              style={{ borderRadius: 8 }}
             >
               发送
             </Button>
