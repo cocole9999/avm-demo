@@ -2,6 +2,36 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.17] - 2026-07-26
+
+### 修复 Markdown 报告中的工作项蓝色链接无法跳转
+
+#### 问题
+AI 助理面板、Dashboard 报告、迭代回顾等所有通过 `MarkdownContent` 渲染的模块中，`BUG-1` / `TASK-5` / `REQ-4` 等蓝色工作项链接点击无反应，鼠标指针也不会变成手型，URL 地址栏无变化。
+
+#### 根因
+- `linkifyWorkItemKeys` 把工作项编号包裹成 `<a href="avm-wi://REQ-4" class="avm-wi-link" data-wi-key="REQ-4">REQ-4</a>`
+- `DOMPurify.sanitize` 默认 `ALLOWED_URI_REGEXP` 只允许 `http` / `https` / `mailto` / `tel` / `callto` / `cid` / `xmpp` 等协议，会把 `avm-wi://` 视为非法协议
+- 清洗后链接变成 `<a class="avm-wi-link" data-wi-key="REQ-4">REQ-4</a>`，`href` 被静默清空
+- `MarkdownContent.handleClick` 拿到 `href=null` 后第一行 `if (!href) return;` 直接退出，跳转逻辑没机会执行
+
+#### 修复
+- **DOMPurify 允许 avm-wi 协议** — 在 `MarkdownContent.tsx` 给 `DOMPurify.sanitize` 增加 `ALLOWED_URI_REGEXP`，把 `avm-wi` 加进允许协议白名单，链接 `href` 不再被清空
+- **handleClick 兜底** — 即使将来 DOMPurify 升级或配置变更再次清洗掉 `href`，仍可通过 `<a>` 上的 `data-wi-key` 属性识别工作项并 `navigate` 跳转到详情页
+- **保留更多 data 属性** — `ADD_ATTR` 增加 `data-href`，便于后续需要原 href 时能从备份属性读取
+
+#### 影响范围
+所有使用 `MarkdownContent` 组件的位置均自动修复：
+- AI 助理面板（AgentPane / GlobalAIAssistant）
+- 仪表盘风险报告（DashboardPage）
+- 迭代回顾报告（GanttPage）
+- AI 报告页（AIPage）
+
+#### 验证
+- `npx tsc --noEmit` 退出码 0
+- `npx vitest run utils/workItemLinker.test.ts` 20/20 通过
+- 用 Node + JSDOM 复现 DOMPurify 清洗行为，确认 `ALLOWED_URI_REGEXP` 修复后 `href` 完整保留
+
 ## [V1.55.16] - 2026-07-26
 
 ### Sider 底部「当前迭代」列表改为可折叠

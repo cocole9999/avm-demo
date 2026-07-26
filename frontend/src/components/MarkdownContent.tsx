@@ -20,15 +20,29 @@ export function MarkdownContent({ content, className, style, onLinkClick }: Mark
     // V1.50: 在 marked 解析前先 linkify 工作项编号（marked 默认保留 inline HTML）
     const linked = linkifyWorkItemKeys(content);
     const raw = marked.parse(linked, { async: false, breaks: true, gfm: true }) as string;
+    // V1.55.x: DOMPurify 默认会过滤掉自定义协议（如 avm-wi://），导致 href 被清空。
+    // 这里扩展 ALLOWED_URI_REGEXP 允许 avm-wi 协议通过，并保留 data-wi-key / data-href 兜底属性。
     return DOMPurify.sanitize(raw, {
-      ADD_ATTR: ['data-wi-key', 'target', 'rel'],
+      ADD_ATTR: ['data-wi-key', 'data-href', 'target', 'rel'],
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|avm-wi):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
     });
   }, [content]);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const target = (e.target as HTMLElement).closest('a');
     if (!target) return;
-    const href = target.getAttribute('href');
+    // V1.55.x: 优先用 href；若 href 被清洗兜底用 data-wi-key / data-href
+    const href = target.getAttribute('href') || target.getAttribute('data-href') || '';
+    const wiKey = target.getAttribute('data-wi-key') || '';
+
+    // 兜底：即使 href 已被 DOMPurify 清空，也能通过 data-wi-key 跳转到工作项详情页
+    if (!href && wiKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const path = workItemLinkPath(wiKey);
+      if (path) navigate(path);
+      return;
+    }
     if (!href) return;
 
     // V1.50: 拦截工作项链接，跳转到详情页

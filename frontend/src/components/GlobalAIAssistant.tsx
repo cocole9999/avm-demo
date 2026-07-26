@@ -874,7 +874,7 @@ export function GlobalAIAssistant(props: GlobalAIAssistantProps = {}) {
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 4px 0' }}>
               <Space size={2} align="center">
-                <Tooltip title="添加附件">
+                <Tooltip title="使用 / 调用命令和技能">
                   <Button type="text" size="small"
                     icon={<span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 14 }}>/</span>}
                     style={{ width: 32, height: 32, borderRadius: '50%', color: '#666' }}

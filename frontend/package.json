@@ -1,6 +1,6 @@
 {
   "name": "avm-frontend",
-  "version": "1.55.16",
+  "version": "1.55.17",
   "type": "module",
   "scripts": {
     "dev": "vite",
