@@ -2,6 +2,19 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.14] - 2026-07-26
+
+### 模型选择器移至底部输入框（Trae Work 风格）
+
+#### 变更
+- **顶部栏精简** — 从顶部栏移除模型选择器（ModelSelector），减少右侧拥挤，腾出空间给会话菜单 / 清空 / 更多
+- **底部工具行收纳模型** — 把 ModelSelector 移至输入框下方的工具行最左侧，与「Enter 发送 · Shift+Enter 换行」提示和「发送/停止」按钮同行布局（Trae Work 风格：左工具 + 中提示 + 右发送）
+- **提示文案精简** — 删除「N 个工具可用」前缀（信息密度过高），保留核心的「Enter 发送 · Shift+Enter 换行」快捷键提示
+- **窄面板适配** — 提示文案加 `overflow: hidden + textOverflow: ellipsis + whiteSpace: nowrap`，避免模型选择器长名称时挤压提示
+
+#### 验证
+- `npx tsc --noEmit` 退出码 0
+
 ## [V1.55.13] - 2026-07-26
 
 ### AI 助理面板 UI 重设计（仿 Trae Work 风格）

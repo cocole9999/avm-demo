@@ -278,11 +278,7 @@ export function AgentPane() {
           <span style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>AI 助理</span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }} />
-        {width >= 360 && (
-          <div style={{ flexShrink: 0 }}>
-            <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
-          </div>
-        )}
+        {/* V1.55.14: 模型选择器移至底部输入框工具行（Trae Work 风格） */}
         <SessionMenu
           agentId={activeAgent?.id}
           currentSessionId={panel.sessionId}
@@ -535,9 +531,13 @@ export function AgentPane() {
             style={{ padding: '8px 10px', fontSize: 13, resize: 'none' }}
           />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '0 2px' }}>
-          <span style={{ fontSize: 11, color: token.colorTextTertiary, flex: 1 }}>
-            {activeAgent ? `${activeAgent.allowedTools?.length || 0} 个工具可用 · Enter 发送 · Shift+Enter 换行` : '请先选择 Agent'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '0 2px' }}>
+          {/* V1.55.14: 模型选择器移至此行（Trae Work 风格） */}
+          {activeAgent && (
+            <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
+          )}
+          <span style={{ fontSize: 11, color: token.colorTextTertiary, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activeAgent ? `Enter 发送 · Shift+Enter 换行` : '请先选择 Agent'}
           </span>
           {loading ? (
             <Button
