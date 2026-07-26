@@ -2,6 +2,18 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.15] - 2026-07-26
+
+### 标题「AI 助理」→「Agent 助理」
+
+#### 变更
+- **顶部栏徽标** — 「AI 助理」→「Agent 助理」（与下方 Agent Tab 语义一致）
+- **空状态默认名** — 无 activeAgent 时显示「Agent 助理」
+- **可访问性 aria-label** — 同步更新「Agent 助理面板」与「Agent 助理（分离模式）」
+
+#### 验证
+- `npx tsc --noEmit` 退出码 0
+
 ## [V1.55.14] - 2026-07-26
 
 ### 模型选择器移至底部输入框（Trae Work 风格）

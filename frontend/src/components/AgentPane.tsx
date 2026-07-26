@@ -275,7 +275,7 @@ export function AgentPane() {
           flexShrink: 0,
         }}>
           <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 14 }} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>AI 助理</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>Agent 助理</span>
         </div>
         <div style={{ flex: 1, minWidth: 0 }} />
         {/* V1.55.14: 模型选择器移至底部输入框工具行（Trae Work 风格） */}
@@ -408,7 +408,7 @@ export function AgentPane() {
             )}
             {/* 标题 + 描述 */}
             <div style={{ fontSize: 16, fontWeight: 600, color: token.colorText, marginBottom: 8, letterSpacing: 0.2 }}>
-              {activeAgent ? activeAgent.name : 'AI 助理'}
+              {activeAgent ? activeAgent.name : 'Agent 助理'}
             </div>
             <div style={{ fontSize: 13, color: token.colorTextTertiary, maxWidth: 280, textAlign: 'center', lineHeight: 1.7, marginBottom: 22 }}>
               {activeAgent?.description || '选择 Agent 后开始对话'}
@@ -594,7 +594,7 @@ export function AgentPane() {
 
   if (panel.detached) {
     return (
-      <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 1000 }} role="dialog" aria-label="AI 助理（分离模式）">
+      <div style={{ position: 'fixed', right: 24, bottom: 24, zIndex: 1000 }} role="dialog" aria-label="Agent 助理（分离模式）">
         {paneContent}
       </div>
     );
@@ -614,7 +614,7 @@ export function AgentPane() {
           height: '100%',
         }}
         role="complementary"
-        aria-label="AI 助理面板"
+        aria-label="Agent 助理面板"
       >
         {paneContent}
       </aside>
