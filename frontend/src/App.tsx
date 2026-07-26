@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Layout, Menu, theme, Badge, Avatar, Tag, AutoComplete, Dropdown, Space, List, Empty, Button, message, notification as antdNotification, Tooltip, Modal, Input, Spin } from 'antd';
+import { Layout, Menu, theme, Badge, Avatar, Tag, Dropdown, Space, List, Empty, Button, message, notification as antdNotification, Tooltip, Modal } from 'antd';
 import {
   AppstoreOutlined, ProjectOutlined, BarChartOutlined,
   BellOutlined, UserOutlined, TeamOutlined, RocketOutlined,
@@ -7,10 +7,10 @@ import {
   AppstoreAddOutlined, ScheduleOutlined, StarOutlined, StarFilled,
   ApartmentOutlined, FunctionOutlined, ThunderboltOutlined, ApiOutlined, FileTextOutlined, ToolOutlined, LineChartOutlined, CameraOutlined, ExperimentOutlined, BankOutlined, CarOutlined, ShopOutlined, ProjectOutlined as ProjectIcon, ImportOutlined,
   CheckOutlined, LogoutOutlined, CalendarOutlined, WifiOutlined, DisconnectOutlined,
-  BulbOutlined, BulbFilled, RobotOutlined, ArrowRightOutlined,
+  BulbOutlined, BulbFilled,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { iterationApi, metaApi, notificationApi, searchApi, favoriteApi, spaceApi, aiApi, type SpaceType, type Favorite } from './api';
+import { iterationApi, metaApi, notificationApi, favoriteApi, spaceApi, aiApi, type SpaceType, type Favorite } from './api';
 import type { Iteration } from './types';
 import { useAuth } from './AuthContext';
 import { useThemeMode } from './ThemeContext';
@@ -31,19 +31,11 @@ export default function App() {
   const [spaces, setSpaces] = useState<SpaceType[]>([]);
   const [currentSpace, setCurrentSpace] = useState<SpaceType | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [searchQ, setSearchQ] = useState('');
   // V1.55.10: 全局 AI 助理状态（由 Logo 旁按钮控制）
   const [globalAIAssistantOpen, setGlobalAIAssistantOpen] = useState(false);
   const [hasConfiguredLlm, setHasConfiguredLlm] = useState(false);
   const [globalMessageCount, setGlobalMessageCount] = useState(0);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  // V1.50: NL 搜索（自然语言 → 筛选条件 + 跳转）
-  const [nlMode, setNlMode] = useState(false);
-  const [nlLoading, setNlLoading] = useState(false);
-  const [nlResult, setNlResult] = useState<{
-    target: string; filters: Record<string, any>; humanReadable: string;
-    url: string; source: string; confidence?: number;
-  } | null>(null);
+  // V1.55.12: 移除顶部全局搜索框（NL 搜索 + 关键词搜索），改为通过 AI 助理进行检索
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   // V1.52: 通知下拉面板预览（前 5 条最新未读，WS 收到时插入头部）
   const [notifPreview, setNotifPreview] = useState<any[]>([]);
@@ -302,67 +294,8 @@ export default function App() {
     }
   };
 
-  // V1.50: NL 搜索 handler
-  const handleNlSearch = async (q?: string) => {
-    const query = (q ?? searchQ).trim();
-    if (!query) {
-      setNlResult(null);
-      return;
-    }
-    setNlLoading(true);
-    try {
-      const r = await aiApi.nlSearch(query);
-      setNlResult({
-        target: r.target,
-        filters: r.filters,
-        humanReadable: r.humanReadable,
-        url: r.url,
-        source: r.source,
-        confidence: r.confidence,
-      });
-    } catch (e: any) {
-      message.error('NL 搜索失败: ' + (e?.message || '未知错误'));
-    } finally {
-      setNlLoading(false);
-    }
-  };
-
-  const handleNlNavigate = () => {
-    if (!nlResult) return;
-    // 转换 me → 当前用户名
-    const me = (() => {
-      try {
-        const raw = localStorage.getItem('avm-auth');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed?.user?.displayName) return parsed.user.displayName;
-        }
-      } catch { /* ignore */ }
-      return '我';
-    })();
-    let url = nlResult.url;
-    if (nlResult.filters.assignee === 'me') url = url.replace('assignee=me', `assignee=${encodeURIComponent(me)}`);
-    if (nlResult.filters.reporter === 'me') url = url.replace('reporter=me', `reporter=${encodeURIComponent(me)}`);
-    navigate(url);
-    setNlResult(null);
-    setSearchQ('');
-    setNlMode(false);
-  };
-
-  // 全局搜索
-  const handleSearch = async (q: string) => {
-    setSearchQ(q);
-    if (!q.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    try {
-      const r = await searchApi.search(q);
-      setSearchResults(r.results);
-    } catch {
-      setSearchResults([]);
-    }
-  };
+  // V1.55.12: 已移除顶部全局搜索框（handleNlSearch / handleNlNavigate / handleSearch），
+  // 关键词搜索与 NL 自然语言搜索改由 AI 助理提供。
 
   const handleMarkAllRead = async () => {
     await notificationApi.markAllRead(CURRENT_USER);
@@ -631,91 +564,7 @@ export default function App() {
           </Space>
 
           <Space size={16} style={{ flex: 1, justifyContent: 'flex-end' }}>
-            {/* V1.50: 全局搜索（关键词 + NL 双模式） */}
-            <div style={{ position: 'relative', width: 'clamp(180px, 30vw, 320px)' }}>
-              <Space.Compact>
-                <Tooltip title={nlMode ? '切换到关键词搜索' : '切换到 AI 自然语言搜索（如「上周延期项目」）'}>
-                  <Button
-                    size="middle"
-                    type={nlMode ? 'primary' : 'default'}
-                    icon={<RobotOutlined />}
-                    onClick={() => { setNlMode(!nlMode); setNlResult(null); setSearchResults([]); setSearchQ(''); }}
-                    style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-                  />
-                </Tooltip>
-                {nlMode ? (
-                  <Input.Search
-                    style={{ width: 'calc(100% - 40px)' }}
-                    value={searchQ}
-                    onChange={e => setSearchQ(e.target.value)}
-                    onSearch={(v) => handleNlSearch(v)}
-                    placeholder="试试「上周延期项目」「我负责的 P0 需求」"
-                    allowClear
-                    enterButton={nlLoading ? <Spin size="small" /> : <ThunderboltOutlined />}
-                    loading={nlLoading}
-                  />
-                ) : (
-                  <AutoComplete
-                    style={{ width: 'calc(100% - 40px)' }}
-                    value={searchQ}
-                    onChange={handleSearch}
-                    placeholder="搜索工作项/迭代/图表/人员..."
-                    allowClear
-                  />
-                )}
-              </Space.Compact>
-              {/* NL 解析中提示 */}
-              {nlMode && nlLoading && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 16 }}>
-                  <Space>
-                    <Spin size="small" />
-                    <span style={{ fontSize: 13, color: '#666' }}>AI 正在解析查询条件…</span>
-                  </Space>
-                </div>
-              )}
-              {/* NL 解析结果弹层 */}
-              {nlMode && nlResult && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 12 }}>
-                  <Space direction="vertical" style={{ width: '100%' }} size={6}>
-                    <Space size={6}>
-                      <Tag color="blue" icon={<RobotOutlined />}>AI 解析</Tag>
-                      <Tag color={nlResult.source === 'llm' ? 'green' : 'orange'}>{nlResult.source === 'llm' ? 'LLM' : '规则'}</Tag>
-                      {nlResult.confidence != null && <Tag color="default">置信 {Math.round(nlResult.confidence * 100)}%</Tag>}
-                    </Space>
-                    <div style={{ fontSize: 12, color: '#666' }}>{nlResult.humanReadable || '已解析筛选条件'}</div>
-                    {Object.keys(nlResult.filters).length > 0 && (
-                      <Space wrap size={4}>
-                        {Object.entries(nlResult.filters).map(([k, v]) => (
-                          <Tag key={k} color="geekblue" style={{ fontSize: 11 }}>
-                            {k} = {String(v)}
-                          </Tag>
-                        ))}
-                      </Space>
-                    )}
-                    <Button type="primary" block size="small" icon={<ArrowRightOutlined />} onClick={handleNlNavigate}>
-                      跳转到{nlResult.target === 'project' ? '项目' : nlResult.target === 'customer' ? '客户' : '工作项'}列表
-                    </Button>
-                  </Space>
-                </div>
-              )}
-              {searchResults.length > 0 && !nlMode && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', maxHeight: 480, overflow: 'auto' }}>
-                  <List
-                    size="small"
-                    dataSource={searchResults}
-                    renderItem={(r: any) => (
-                      <List.Item style={{ cursor: 'pointer', padding: '8px 12px' }} onClick={() => { navigate(r.link); setSearchQ(''); setSearchResults([]); }}>
-                        <List.Item.Meta
-                          avatar={<Tag color="blue">{r.type}</Tag>}
-                          title={<span style={{ fontSize: 13 }}>{r.title}</span>}
-                          description={<span style={{ fontSize: 11, color: '#999' }}>{r.subtitle}</span>}
-                        />
-                      </List.Item>
-                    )}
-                  />
-                </div>
-              )}
-            </div>
+            {/* V1.55.12: 已移除顶部全局搜索框（关键词 + NL 双模式），改由 AI 助理提供检索能力 */}
 
             {stats && (
               <div style={{ fontSize: 13, color: themeToken.colorTextSecondary }}>

@@ -2,6 +2,19 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.12] - 2026-07-26
+
+### 移除顶部全局搜索框
+
+#### 变更
+- **移除顶部搜索框** — 删除 Header 中"机器人按钮 + Input.Search/AutoComplete + NL 解析弹层 + 关键词搜索结果弹层"的整个组合，理由：边框+阴影在小尺寸下显得画蛇添足，且与 AI 助理存在功能重叠
+- **检索能力移交 AI 助理** — 关键词搜索与 NL 自然语言搜索（"上周延期项目"等）改由 GlobalAIAssistant 提供，用户可通过 Logo 左侧 AI 按钮或 `Ctrl+K` 唤起
+- **代码清理** — 删除 `searchQ / searchResults / nlMode / nlLoading / nlResult` 五个 state 与 `handleNlSearch / handleNlNavigate / handleSearch` 三个 handler；清理 `AutoComplete / Input / Spin`（antd）与 `RobotOutlined / ArrowRightOutlined`（icons）以及 `searchApi`（api）共 6 处不再使用的 import
+
+#### 验证
+- `npx tsc --noEmit` 退出码 0，类型检查通过
+- 顶栏右侧释放的宽度自动由工作项统计 / 收藏 / 通知 三个模块吸收，布局更宽松
+
 ## [V1.55.10] - 2026-07-26
 
 ### AI 助理悬浮按钮移至 Sider Logo 左侧
