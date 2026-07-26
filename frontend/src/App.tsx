@@ -425,12 +425,13 @@ export default function App() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light" width={232} aria-label="主导航侧边栏" role="navigation">
+    <Layout style={{ height: '100vh', overflow: 'hidden' }}>
+      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} theme="light" width={232} aria-label="主导航侧边栏" role="navigation" style={{ height: '100vh', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{
           height: 56, margin: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
           borderBottom: `1px solid ${themeToken.colorBorderSecondary}`,
-          gap: 8,
+          gap: 8, flexShrink: 0,
         }}>
           <RocketOutlined style={{ fontSize: 22, color: themeToken.colorPrimary }} />
           {!collapsed && (
@@ -443,7 +444,7 @@ export default function App() {
           selectedKeys={[selectedKey]}
           defaultOpenKeys={['grp-work']}
           inlineCollapsed={collapsed}
-          style={{ borderRight: 0 }}
+          style={{ borderRight: 0, flex: 1, overflowY: 'auto', overflowX: 'hidden' }}
           items={[
             // ========== 1. 工作区 (每天用) ==========
             {
@@ -534,7 +535,7 @@ export default function App() {
         />
 
         {!collapsed && iterations.length > 0 && (
-          <div style={{ padding: '12px 16px', marginTop: 16, borderTop: `1px solid ${themeToken.colorBorderSecondary}` }}>
+          <div style={{ padding: '12px 16px', borderTop: `1px solid ${themeToken.colorBorderSecondary}`, flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
             <div style={{ fontSize: 12, color: themeToken.colorTextTertiary, marginBottom: 8 }}>
               <TeamOutlined /> 当前迭代
             </div>
@@ -551,6 +552,7 @@ export default function App() {
             ))}
           </div>
         )}
+        </div>
       </Sider>
 
       <Layout>
@@ -718,7 +720,7 @@ export default function App() {
           </Space>
         </Header>
 
-        <Content style={{ margin: 16, display: 'flex', minHeight: 0 }} role="main" aria-label="主要内容区域">
+        <Content style={{ margin: 16, display: 'flex', minHeight: 0, height: 'calc(100vh - 64px - 32px)', overflow: 'hidden' }} role="main" aria-label="主要内容区域">
           <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
             <Outlet />
           </div>

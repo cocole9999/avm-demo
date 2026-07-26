@@ -317,11 +317,12 @@ export function AgentPane() {
       </div>
 
       {/* 消息区 */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 12, background: token.colorBgLayout }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 12, background: token.colorBgLayout }}>
         {messages.length === 0 ? (
           <div style={{
-            height: '100%', display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
+            minHeight: '100%', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'flex-start',
+            paddingTop: 60,
             color: token.colorTextTertiary, fontSize: 13, textAlign: 'center',
           }}>
             <RobotOutlined style={{ fontSize: 32, marginBottom: 12, color: token.colorPrimary }} />
@@ -504,7 +505,19 @@ export function AgentPane() {
   return (
     <>
       {resizeHandle}
-      <aside data-agent-pane="true" style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0, height: '100%' }} role="complementary" aria-label="AI 助理面板">
+      <aside
+        data-agent-pane="true"
+        style={{
+          display: 'flex',
+          width,
+          flexShrink: 0,
+          minWidth: 0,
+          minHeight: 0,
+          height: '100%',
+        }}
+        role="complementary"
+        aria-label="AI 助理面板"
+      >
         {paneContent}
       </aside>
     </>
