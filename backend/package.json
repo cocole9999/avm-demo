@@ -1,6 +1,6 @@
 {
   "name": "avm-backend",
-  "version": "1.55.8",
+  "version": "1.55.9",
   "description": "AVM Project Center - Backend (V1.55.6: Agent 反馈与统计)",
   "main": "dist/index.js",
   "scripts": {

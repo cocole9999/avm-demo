@@ -2,6 +2,18 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.9] - 2026-07-26
+
+### AI Agent 系统 5 项 bug 修复
+
+#### 修复
+- **NL 搜索响应慢无反馈** — 用户输入"上周延期项目"后看不到任何反馈。新增"AI 正在解析查询条件…"loading 弹层，点击搜索后立即显示
+- **NL 解析结果弹层定位错位** — 弹层 `top: 40px; right: 0` 导致 480px 宽弹层向左溢出 320px 的搜索框容器。改为 `top: 100%; left: 0` 对齐搜索框左边缘
+- **关键词搜索结果弹层偏离** — 搜索结果 `right: max(16px, calc((100vw - 720px) / 2))` 在 1440px 视口下偏移 360px。移入 relative 容器内，统一 `top: 100%; left: 0`
+- **AI 面板窄宽度工具栏溢出** — 280px 面板宽度下工具栏需要 416px 导致溢出。响应式隐藏：`width < 320` 隐藏"AI 助理"标题，`< 360` 隐藏 Agent 名标签，`< 380` 隐藏模型选择器
+- **AI 输入框回车无内容显示** — 根因：`ensureSession` 创建新 session 后调用 `panel.setSessionId(s.id)`，触发 `useEffect` 异步加载 session 消息（此时为空），覆盖了 `sendMessage` 刚添加的 userMsg 和 aiMsg。修复：用 `justCreatedSessionRef` 标记刚创建的 session，让 `useEffect` 跳过加载
+- **后端 LLM 空回复兜底** — `aiCommand /command` 接口当 LLM 返回空 content 且无 tool_calls 时，`finalContent` 为空字符串。新增兜底：返回"AI 返回了空内容"提示
+
 ## [V1.55.8] - 2026-07-26
 
 ### 布局错乱修复
