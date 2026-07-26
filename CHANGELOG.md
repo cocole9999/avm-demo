@@ -2,6 +2,24 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.7] - 2026-07-26
+
+### Agent 面板 UI 优化
+
+#### 修复
+- **输入框丢失问题** — 重写输入框容器，使用 `flexShrink: 0` + 圆角边框 + 顶部阴影确保输入框始终可见，不再被消息区挤压裁剪
+
+#### 改进
+- **6 个专用 Agent 图标重新设计** — 从 emoji 升级为彩色圆形徽章（圆形背景 + 居中 antd 图标），辨识度更高、与左侧导航视觉一致
+  - 通用（蓝）：`RobotOutlined`
+  - 项目（青）：`ProjectOutlined`
+  - 工作项（橙）：`UnorderedListOutlined`
+  - 报告（紫）：`SnippetsOutlined`
+  - 风险（红）：`AlertOutlined`
+  - 评审（绿）：`MessageOutlined`
+- 顶部状态徽章、Tab 按钮、空状态、提示气泡均使用新的徽章设计
+- 提示文本补充 `Enter` / `Shift+Enter` 快捷键说明
+
 ## [V1.55.6] - 2026-07-26
 
 ### Agent 反馈与统计
