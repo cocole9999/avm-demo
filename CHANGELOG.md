@@ -2,6 +2,20 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.8] - 2026-07-26
+
+### 布局错乱修复
+
+#### 修复
+- **AI 面板消息区空状态被推出视口** — 外层 `<Layout minHeight: 100vh>` 被 Sider 的长菜单拉长至 3077px，导致 AI 面板 `<aside>` 高度也变成 2981px，消息区空状态因 `justifyContent: center` 被居中到 y=1430px（视口外）。修复后外层 Layout 固定 `height: 100vh` + `overflow: hidden`，AI 面板 ASIDE 高度回落至 804px（视口内）
+- **Content 高度溢出** — Content 增加 `height: calc(100vh - 64px - 32px)` 显式约束，避免被工作台内容（1032px）拉长
+- **Sider 长菜单溢出** — Sider 内部用 `flex column` + `Menu overflowY: auto` + 迭代列表 `maxHeight: 40%` 三段式布局，菜单可独立滚动
+- **AI 面板消息区 minHeight: 0** — flex 容器内 minHeight: 0 避免被 flex 默认行为拉伸，空状态改为顶部对齐（`paddingTop: 60`）保证内容显示在视口内
+
+#### 验证
+- 截图：1440x900 视口下 AI 面板完整显示，Header 搜索框/通知/用户头像不被覆盖
+- 跨页验证：工作台 / 项目管理 / 任务管理 / LLM 设置 / 报告均布局正确
+
 ## [V1.55.7] - 2026-07-26
 
 ### Agent 面板 UI 优化
