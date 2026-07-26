@@ -53,6 +53,10 @@ interface CommandRequest {
     dataUrl?: string;      // 图片 base64 dataURL
     size?: number;
   }>;
+  systemPrompt?: string;  // V1.55: Agent 自定义 system prompt（覆盖默认）
+  allowedTools?: string[];// V1.55: 工具白名单（只暴露这些工具给 LLM）
+  provider?: string;      // V1.55: 指定 LLM provider
+  model?: string;         // V1.55: 指定模型
 }
 
 interface ToolCallRecord {
@@ -65,7 +69,7 @@ interface ToolCallRecord {
 
 aiCommandRouter.post('/command', async (req, res) => {
   try {
-    const { command, context, maxSteps = 5, history, attachments } = req.body as CommandRequest;
+    const { command, context, maxSteps = 5, history, attachments, systemPrompt, allowedTools, provider: providerName, model } = req.body as CommandRequest;
     if (!command && (!attachments || attachments.length === 0)) {
       return res.status(400).json({ error: 'command 或 attachments 必填' });
     }
@@ -110,13 +114,24 @@ aiCommandRouter.post('/command', async (req, res) => {
     // V1.31: 把 Wiki 知识库（产品概念、角色、流程、术语）也注入 system prompt，让 LLM 掌握 AVM 全部信息
     const wiki = loadWikiKnowledge();
 
-    // 工具列表
-    const tools = toolsToOpenAIFormat();
+    // V1.55: 工具白名单过滤（空数组 = 全量）
+    const allTools = toolsToOpenAIFormat();
+    const tools = (Array.isArray(allowedTools) && allowedTools.length > 0)
+      ? allTools.filter((t: any) => {
+          const name = t?.function?.name;
+          return name && allowedTools.includes(name);
+        })
+      : allTools;
+
+    // V1.55: 如果传入了 systemPrompt，优先使用（Agent 模式）；否则用默认
+    const systemContent = (typeof systemPrompt === 'string' && systemPrompt.trim().length > 0)
+      ? `${systemPrompt}\n\n---\n\n${wiki.text}\n\n---\n\n${snapshot.text}\n\n你是一位 AVM 项目管理专家。用户会用自然语言给你命令，你需要用提供的工具来执行操作。\n\n规则：\n1. 必须基于项目快照和工具返回的真实数据回答\n2. 优先使用知识库中的术语、概念、角色、流程定义回答\n3. 调用工具前先想清楚要哪些参数；可以并行调用多个工具\n4. 工具调用结果要简洁总结给用户\n5. 数据中没有的字段必须明确说"数据中没有"\n6. 严禁编造项目/客户/合同额/联系人等任何数据\n7. 多轮对话时记住上文提到的项目/工作项/客户名，回复中可以直接引用简称\n8. 如用户问登录账号/权限/AI能力/MCP 等，参考知识库中的对应条目\n9. 当用户问"外部依赖"、"台架"、"实车"、"车模"、"SDB"、"UE"、"UI"、"标定"是否就绪/准备好时，必须调用 list_external_dependencies 工具获取真实数据`
+      : `${wiki.text}\n\n---\n\n${snapshot.text}\n\n你是一位 AVM 项目管理专家。用户会用自然语言给你命令，你需要用提供的工具来执行操作。\n\n规则：\n1. 必须基于项目快照和工具返回的真实数据回答\n2. 优先使用知识库中的术语、概念、角色、流程定义回答\n3. 调用工具前先想清楚要哪些参数；可以并行调用多个工具\n4. 工具调用结果要简洁总结给用户\n5. 数据中没有的字段必须明确说"数据中没有"\n6. 严禁编造项目/客户/合同额/联系人等任何数据\n7. 多轮对话时记住上文提到的项目/工作项/客户名，回复中可以直接引用简称\n8. 如用户问登录账号/权限/AI能力/MCP 等，参考知识库中的对应条目\n9. 当用户问"外部依赖"、"台架"、"实车"、"车模"、"SDB"、"UE"、"UI"、"标定"是否就绪/准备好时，必须调用 list_external_dependencies 工具获取真实数据`;
+
     const messages: any[] = [
       {
         role: 'system',
-        content: `${wiki.text}\n\n---\n\n${snapshot.text}\n\n你是一位 AVM 项目管理专家。用户会用自然语言给你命令，你需要用提供的工具来执行操作。\n\n规则：\n1. 必须基于项目快照和工具返回的真实数据回答\n2. 优先使用知识库中的术语、概念、角色、流程定义回答\n3. 调用工具前先想清楚要哪些参数；可以并行调用多个工具\n4. 工具调用结果要简洁总结给用户\n5. 数据中没有的字段必须明确说"数据中没有"\n6. 严禁编造项目/客户/合同额/联系人等任何数据\n7. 多轮对话时记住上文提到的项目/工作项/客户名，回复中可以直接引用简称\n8. 如用户问登录账号/权限/AI能力/MCP 等，参考知识库中的对应条目
-9. 当用户问"外部依赖"、"台架"、"实车"、"车模"、"SDB"、"UE"、"UI"、"标定"是否就绪/准备好时，必须调用 list_external_dependencies 工具获取真实数据`,
+        content: systemContent,
       },
     ];
     if (context) {

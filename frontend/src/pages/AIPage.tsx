@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   RobotOutlined, SendOutlined, UserOutlined, BulbOutlined, FireOutlined, FileTextOutlined,
-  MedicineBoxOutlined, FlagOutlined, SettingOutlined, ReloadOutlined, PlusOutlined,
+  MedicineBoxOutlined, FlagOutlined, SettingOutlined, ReloadOutlined, PlusOutlined, ExperimentOutlined,
 } from '@ant-design/icons';
 import { aiApi, llmSettingsApi, metaApi } from '../api';
 import type { AIFieldConfig } from '../types';
@@ -133,6 +133,9 @@ export function AIPage() {
           )}
           <Link to="/llm-settings">
             <Button size="small" type="link" icon={<SettingOutlined />}>LLM 设置</Button>
+          </Link>
+          <Link to="/agent-stats">
+            <Button size="small" type="link" icon={<ExperimentOutlined />}>Agent 统计</Button>
           </Link>
           <Tooltip title="手动刷新 AI 知识库快照">
             <Button

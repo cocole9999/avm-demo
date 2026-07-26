@@ -51,6 +51,7 @@ const PATH_LABELS: Record<string, string> = {
   'audit-logs': '审计日志',
   imports: '数据导入',
   reports: '报告',
+  'agent-stats': 'Agent 统计',
 };
 
 // 工作项类型 → 中文

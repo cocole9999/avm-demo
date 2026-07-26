@@ -1,7 +1,7 @@
 {
   "name": "avm-backend",
-  "version": "1.54.0",
-  "description": "AVM Project Center - Backend (V1.54: 安全依赖与基线加固)",
+  "version": "1.55.6",
+  "description": "AVM Project Center - Backend (V1.55.6: Agent 反馈与统计)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

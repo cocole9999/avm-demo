@@ -17,12 +17,13 @@ export type AuditEntity =
   | 'project' | 'customer' | 'workItem' | 'carModel' | 'contact'
   | 'dependency' | 'user' | 'webhook' | 'automation' | 'import' | 'handover'
   | 'auth' | 'upload' | 'template' | 'field' | 'comment' | 'space' | 'role'
-  | 'flow' | 'chart' | 'dashboard' | 'review' | 'ai' | 'savedFilter';
+  | 'flow' | 'chart' | 'dashboard' | 'review' | 'ai' | 'savedFilter'
+  | 'agent' | 'agentSession' | 'agentFeedback';
 
 export type AuditAction =
   | 'create' | 'update' | 'delete' | 'login' | 'logout'
   | 'login_failed' | 'status_change' | 'import' | 'export'
-  | 'toggle' | 'assign';
+  | 'toggle' | 'assign' | 'seed' | 'fork' | 'append';
 
 export interface AuditChange {
   field: string;

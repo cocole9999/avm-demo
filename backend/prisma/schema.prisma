@@ -972,6 +972,60 @@ model Contact {
   @@index([role])
 }
 
+// V1.55 AI 专用 Agent — 6 个内置专用助理（项目/工作项/报告/风险/评审/通用）
+model Agent {
+  id           String   @id @default(cuid())
+  spaceId      String?
+  key          String   // 'general' | 'project' | 'workItem' | 'report' | 'risk' | 'review'
+  name         String
+  description  String   @default("")
+  icon         String   @default("💬")
+  systemPrompt String   // 模板，支持 {{page}} {{user}} {{context}} 变量
+  scope        String   @default("global")  // 'global' | 'page'
+  allowedPages String   @default("[]")      // JSON 数组：['/projects/*', '/work-items/*']
+  llmConfigId  String?  // 关联 LLMSettings.id（null = 用户默认）
+  allowedTools String   @default("[]")      // JSON 数组：mcp 工具名白名单
+  order        Int      @default(0)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sessions     AgentSession[]
+
+  @@unique([spaceId, key])
+  @@index([enabled, order])
+}
+
+// V1.55 Agent 会话（云端持久化 + Fork + URL 分享）
+model AgentSession {
+  id        String   @id @default(cuid())
+  agentId   String
+  userId    String
+  userName  String
+  title     String   @default("新会话")
+  messages  String   @default("[]")  // JSON: Message[]
+  metadata  String   @default("{}")  // JSON: {page, contextSnapshot, model, agentKey}
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, agentId, updatedAt])
+  @@index([userId, updatedAt])
+}
+
+// V1.55 Agent 消息反馈（点赞/点踩）
+model AgentMessageFeedback {
+  id        String   @id @default(cuid())
+  sessionId String
+  messageId String
+  userId    String
+  rating    String   // 'up' | 'down'
+  comment   String?
+  createdAt DateTime @default(now())
+
+  @@unique([sessionId, messageId, userId])
+  @@index([sessionId])
+}
+
 model Project {
   id             String     @id @default(cuid())
   code           String     @unique

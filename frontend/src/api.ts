@@ -504,3 +504,102 @@ export const dependencyApi = {
   ready: (id: string) => api.post(`/dependencies/${id}/ready`, {}).then(r => r.data),
   stats: () => api.get<Record<string, number>>('/dependencies/stats/summary').then(r => r.data),
 };
+
+// ============ V1.55 AI 专用 Agent ============
+export interface Agent {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  scope: 'global' | 'page';
+  allowedPages: string[];
+  allowedTools: string[];
+  llmConfigId?: string | null;
+  systemPrompt?: string;
+  order: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentSession {
+  id: string;
+  agentId: string;
+  userId: string;
+  userName: string;
+  title: string;
+  messages: any[];
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  agent?: { id: string; key: string; name: string; icon: string; systemPrompt?: string };
+}
+
+export const agentsApi = {
+  list: () => api.get<Agent[]>('/agents').then(r => r.data),
+  get: (idOrKey: string) => api.get<Agent>(`/agents/${idOrKey}`).then(r => r.data),
+  update: (id: string, data: Partial<Agent>) => api.patch<Agent>(`/agents/${id}`, data).then(r => r.data),
+  seedBuiltin: () => api.post<{ ok: boolean; count: number; agents: { id: string; key: string; name: string }[] }>('/agents/seed/builtin', {}).then(r => r.data),
+};
+
+export const agentSessionsApi = {
+  list: (params?: { agentId?: string; limit?: number }) =>
+    api.get<AgentSession[]>('/agent-sessions', { params }).then(r => r.data),
+  get: (id: string) => api.get<AgentSession>(`/agent-sessions/${id}`).then(r => r.data),
+  create: (data: { agentId: string; title?: string; messages?: any[]; metadata?: Record<string, any> }) =>
+    api.post<AgentSession>('/agent-sessions', data).then(r => r.data),
+  update: (id: string, data: Partial<{ title: string; messages: any[]; metadata: Record<string, any> }>) =>
+    api.patch<AgentSession>(`/agent-sessions/${id}`, data).then(r => r.data),
+  remove: (id: string) => api.delete(`/agent-sessions/${id}`).then(r => r.data),
+  fork: (id: string) => api.post<AgentSession>(`/agent-sessions/${id}/fork`, {}).then(r => r.data),
+  append: (id: string, message: any, title?: string) =>
+    api.post<AgentSession>(`/agent-sessions/${id}/append`, { message, title }).then(r => r.data),
+};
+
+// V1.55.6 Agent 反馈（点赞/点踩）
+export interface AgentMessageFeedback {
+  id: string;
+  sessionId: string;
+  messageId: string;
+  userId: string;
+  rating: 'up' | 'down';
+  comment?: string | null;
+  createdAt: string;
+}
+
+export interface AgentFeedbackByMessage {
+  up: number;
+  down: number;
+  total: number;
+  feedbacks: AgentMessageFeedback[];
+}
+
+export interface AgentFeedbackStats {
+  feedback: {
+    up: number;
+    down: number;
+    total: number;
+    rate: number | null;  // 点赞率百分比（0-100）
+  };
+  sessions: {
+    total: number;
+    byAgent: Array<{
+      agentId: string;
+      key: string;
+      name: string;
+      icon: string;
+      enabled: boolean;
+      count: number;
+    }>;
+  };
+}
+
+export const agentFeedbackApi = {
+  submit: (data: { sessionId: string; messageId: string; rating: 'up' | 'down'; comment?: string }) =>
+    api.post<AgentMessageFeedback>('/agent-feedback', data).then(r => r.data),
+  remove: (id: string) => api.delete(`/agent-feedback/${id}`).then(r => r.data),
+  byMessage: (sessionId: string, messageId: string) =>
+    api.get<AgentFeedbackByMessage>(`/agent-feedback/by-message/${sessionId}/${messageId}`).then(r => r.data),
+  stats: () => api.get<AgentFeedbackStats>('/agent-feedback/stats').then(r => r.data),
+};

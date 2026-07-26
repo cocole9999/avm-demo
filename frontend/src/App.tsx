@@ -15,6 +15,9 @@ import type { Iteration } from './types';
 import { useAuth } from './AuthContext';
 import { useThemeMode } from './ThemeContext';
 import { GlobalAIAssistant } from './components/GlobalAIAssistant';
+import { AgentPane } from './components/AgentPane';
+import { useAgentPanel } from './components/AgentPanelContext';
+import { InlineAskButton } from './components/InlineAskButton';
 import { wsClient } from './services/ws';
 
 const { Header, Sider, Content } = Layout;
@@ -44,6 +47,8 @@ export default function App() {
   const navigate = useNavigate();
   const { token: themeToken } = theme.useToken();
   const { isDark, toggle: toggleTheme } = useThemeMode();
+  // V1.55: Agent 面板状态
+  const agentPanel = useAgentPanel();
 
   useEffect(() => {
     iterationApi.list().then(setIterations).catch(() => {});
@@ -117,6 +122,12 @@ export default function App() {
       }
       // 输入框内: 不响应其他快捷键
       if (isEditable) return;
+      // V1.55: Ctrl+U 唤起/关闭 AI 助理面板（先处理带修饰键的，否则会被通用规则 return）
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U') && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        agentPanel.togglePanel();
+        return;
+      }
       // 修饰键: 不响应 (留给浏览器)
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       switch (e.key) {
@@ -210,6 +221,7 @@ export default function App() {
     if (path.startsWith('/audit-logs')) return 'audit-logs';
     if (path.startsWith('/imports')) return 'imports';
     if (path.startsWith('/reports')) return 'reports';
+    if (path.startsWith('/agent-stats')) return 'agent-stats';
     return 'workbench';
   };
 
@@ -247,6 +259,7 @@ export default function App() {
       case 'audit-logs': return '审计日志';
       case 'imports': return '数据导入';
       case 'reports': return '周报月报';
+      case 'agent-stats': return 'Agent 使用统计';
       default: return '';
     }
   };
@@ -514,6 +527,7 @@ export default function App() {
                 { key: 'audit-logs', icon: <AuditOutlined />, label: <Link to="/audit-logs">审计日志</Link> },
                 { key: 'llm-settings', icon: <ApiOutlined />, label: <Link to="/llm-settings">大模型设置</Link> },
                 { key: 'mcp', icon: <ApiOutlined />, label: <Link to="/mcp">MCP Server</Link> },
+                { key: 'agent-stats', icon: <ExperimentOutlined />, label: <Link to="/agent-stats">Agent 统计</Link> },
               ],
             },
           ]}
@@ -704,12 +718,19 @@ export default function App() {
           </Space>
         </Header>
 
-        <Content style={{ margin: 16 }} role="main" aria-label="主要内容区域">
-          <Outlet />
+        <Content style={{ margin: 16, display: 'flex', minHeight: 0 }} role="main" aria-label="主要内容区域">
+          <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+            <Outlet />
+          </div>
+          {/* V1.55: Agent 面板（嵌入模式下位于 Sider 与右侧内容之间） */}
+          <AgentPane />
         </Content>
       </Layout>
       {/* 全局 AI 助理：悬浮按钮 + Ctrl+K 唤起，跨页面可用 */}
       <GlobalAIAssistant />
+
+      {/* V1.55.5: 选区动作按钮（选中文本时弹出"问 AI"） */}
+      <InlineAskButton />
 
       {/* V1.28 键盘快捷键帮助 */}
       <Modal
@@ -731,6 +752,7 @@ export default function App() {
           <div style={{ marginTop: 8 }}><b>全局</b></div>
           <div style={{ paddingLeft: 16, color: '#666' }}>
             <div><kbd>/</kbd> → 聚焦顶部搜索框</div>
+            <div><kbd>Ctrl+U</kbd> → 切换 AI 助理面板（V1.55）</div>
             <div><kbd>?</kbd> → 显示本帮助</div>
             <div><kbd>Esc</kbd> → 关闭弹窗/Menu/抽屉</div>
           </div>

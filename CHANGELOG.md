@@ -2,6 +2,94 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.6] - 2026-07-26
+
+### Agent 反馈与统计
+
+#### 新增
+- **消息反馈 API** — `POST /api/agent-feedback` 提交点赞/点踩（按 sessionId+messageId+userId 幂等 upsert），`GET /api/agent-feedback/by-message/:sessionId/:messageId` 查询单条消息反馈，`DELETE /api/agent-feedback/:id` 取消（仅本人 / 管理员）
+- **Agent 使用统计 API** — `GET /api/agent-feedback/stats` 返回总反馈数 / 点赞率 / 各 Agent 会话数（管理员可见）
+- **新数据模型** — `AgentMessageFeedback`（id / sessionId / messageId / userId / rating / comment / createdAt）
+- **`MessageFeedbackBar` 组件** — 嵌入 AgentPane 的 AI 消息下方，点赞 / 点踩 / 评论三件套
+  - 自动加载本条消息的累计反馈 + 当前用户的反馈
+  - 未反馈：显示两个 outlined 图标按钮
+  - 已反馈：高亮实心图标，再次点击取消
+  - 评论 Popover：可补充最多 500 字说明，自动同步到后端
+- **`AgentStatsPage` 页面** — `/agent-stats` 管理员看板
+  - 4 张核心卡片：总反馈数 / 点赞 / 点踩 / 点赞率
+  - Agent 会话数排行表（含禁用状态、进度条）
+  - 反馈分布（点赞/点踩百分比可视化）
+  - 面包屑：工作台 / AI 助理 / Agent 统计
+
+#### 导航与集成
+- **`AIPage` 顶部** — 新增「Agent 统计」快捷链接
+- **左侧导航「系统管理」分组** — 新增「Agent 统计」入口
+- **AppBreadcrumb / selectedKey / 页面标题** — 同步添加 agent-stats 路径
+
+#### 数据契约
+- 反馈表 Prisma 模型 + `agentFeedback` 审计实体类型
+- 当前用户从 `localStorage.avm-user-name` 读取用于匹配"我的反馈"
+
+## [V1.55.5] - 2026-07-26
+
+### Agent 会话增强
+
+#### 新增
+- **SessionMenu 组件** — Trae Work 风格会话侧边菜单
+  - 当前 Agent 全部会话列表（按更新时间倒序）
+  - 点击切换会话 + 自动恢复 agentKey
+  - 右上角「新建会话」按钮
+- **Agent Session URL 分享** — `?agentSession=xxx` 进入时自动加载对应会话
+- **SessionMenu API 增强** — `fork` 端点（保留消息历史 + 复制标题 + 标记 forkedFrom）
+- **`append` 端点** — 增量追加消息到会话（用于流式输出中途保存）
+
+## [V1.55.4] - 2026-07-26
+
+### Agent 切换与并发控制
+
+#### 新增
+- **InlineAskButton 组件** — 划词唤起 AI 助理
+  - 监听文本选区变化，浮动按钮出现在选区右上
+  - 提供「解释这段 / 总结这段 / 翻译成中文 / 提问这段」4 个快捷动作
+  - 点击后通过 sessionStorage 注入 prompt 并打开 Agent 面板
+- **`useAgentPendingPrompt` Hook** — 跨组件消费待发送 prompt
+- **useResizablePanel Hook** — Agent 面板可调宽度（280-720px），localStorage 持久化
+- **AgentPane 嵌入导航栏** — Trae Work 风格布局：Sider | Content | AgentPane
+- **Detached 浮层模式** — Agent 面板可分离为右下角浮窗（FullscreenOutlined 切换）
+- **Ctrl+U 快捷键** — 切换 Agent 面板显隐
+
+## [V1.55.3] - 2026-07-26
+
+### Agent 模型与工具管理
+
+#### 新增
+- **ModelSelector 组件** — Agent 面板顶部下拉，可选 provider+model，覆盖全局 LLM 设置
+- **Agent 与 LLM 关联** — Agent.llmConfigId 字段关联 LLMSettings 表，null 时回退到用户默认
+
+## [V1.55] - 2026-07-26
+
+### AI 专用 Agent 系统
+
+#### 数据模型
+- **`Agent` 模型** — 6 个内置专用助理（项目/工作项/报告/风险/评审/通用）
+  - 字段：key / name / description / icon / systemPrompt（模板）/ scope（global|page）/ allowedPages / allowedTools / llmConfigId / order / enabled
+  - `@@unique([spaceId, key])` 约束
+- **`AgentSession` 模型** — 云端持久化会话
+  - 字段：agentId / userId / userName / title / messages（JSON）/ metadata（JSON：含 page / contextSnapshot / model / agentKey）
+
+#### API
+- `GET/POST/PATCH /api/agents` — 6 个内置 Agent 的 CRUD（管理员可编辑 systemPrompt）
+- `POST /api/agents/seed/builtin` — 幂等 upsert 内置 Agent
+- `GET/POST/PATCH/DELETE /api/agent-sessions` — 会话管理
+- `POST /api/agent-sessions/:id/fork` — Trae Work 风格 Fork
+- `POST /api/agent-sessions/:id/append` — 增量追加
+
+#### 智能路由
+- **`agentPrompts.ts` 6 套系统 Prompt** — 通用 / 项目 / 工作项 / 报告 / 风险 / 评审
+  - 每套支持 `{{user}} {{page}} {{pageName}} {{context}} {{date}}` 变量
+  - 每套独立的 `allowedTools` 白名单（`[]` = 全量）
+  - 每套独立的 `allowedPages` 范围控制
+
 ## [V1.54] - 2026-07-25
 
 ### 安全依赖与基线加固

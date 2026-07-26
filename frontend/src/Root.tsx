@@ -18,6 +18,7 @@ import { WorkItemDetailPage } from './pages/WorkItemDetailPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { useAuth } from './AuthContext';
 import { ThemeProvider, useThemeMode } from './ThemeContext';
+import { AgentPanelProvider } from './components/AgentPanelContext';
 
 // 懒加载低频页面（首屏之外用到的才加载）
 const FlowsPage = lazy(() => import('./pages/FlowsPage').then(m => ({ default: m.FlowsPage })));
@@ -50,6 +51,7 @@ const ImportWizardPage = lazy(() => import('./pages/ImportWizardPage').then(m =>
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage').then(m => ({ default: m.NotFoundPage })));
 const WatchingPage = lazy(() => import('./pages/WatchingPage').then(m => ({ default: m.WatchingPage })));
+const AgentStatsPage = lazy(() => import('./pages/AgentStatsPage').then(m => ({ default: m.AgentStatsPage })));
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { user } = useAuth();
@@ -120,6 +122,8 @@ function ThemedApp() {
                 <Route path="imports" element={<ImportWizardPage />} />
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="watching" element={<WatchingPage />} />
+                {/* V1.55.6: Agent 使用统计 */}
+                <Route path="agent-stats" element={<AgentStatsPage />} />
                 {/* V1.48: 404 兜底路由 */}
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
