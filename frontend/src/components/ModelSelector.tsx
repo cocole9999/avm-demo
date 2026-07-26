@@ -43,18 +43,18 @@ export function ModelSelector({ value, onChange, size = 'small' }: ModelSelector
       .then((r: any) => {
         // 提取当前激活的 provider + model
         const currentProv = r.activeProviders?.[0];
-        const setting = r.settings?.find((s: any) => s.provider === currentProv);
+        const setting = r.settings?.find((s: any) => s.provider === currentProv?.key);
         setStatus({
           configured: !!currentProv,
-          provider: currentProv,
-          model: setting?.model,
+          provider: currentProv?.key,
+          model: currentProv?.model || setting?.currentModel || setting?.model,
         });
-        // 提取所有可用 provider + models
+        // 提取所有 provider + models（r.providers 是对象数组，非字符串）
         const provs: ProviderMeta[] = (r.providers || []).map((p: any) => ({
-          key: p,
-          name: p,
-          models: [],
-          defaultModel: '',
+          key: p.key || p,
+          name: p.name || p.key || p,
+          models: p.models || [],
+          defaultModel: p.defaultModel || (p.models?.[0] || ''),
         }));
         setProviders(provs);
       })

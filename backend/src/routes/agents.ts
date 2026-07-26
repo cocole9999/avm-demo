@@ -89,8 +89,11 @@ agentsRouter.post('/seed/builtin', requireRole('space_admin'), async (req: Authe
   try {
     const date = new Date().toISOString().slice(0, 10);
     const created: any[] = [];
+    // 全局 Agent 使用空字符串 '' 作为 spaceId（SQLite 中 NULL 不参与唯一约束，无法 upsert）
+    const GLOBAL_SPACE_ID = '';
     for (const tpl of AGENT_PROMPTS) {
       const data = {
+        spaceId: GLOBAL_SPACE_ID,
         key: tpl.key,
         name: tpl.name,
         description: tpl.description,
@@ -109,9 +112,9 @@ agentsRouter.post('/seed/builtin', requireRole('space_admin'), async (req: Authe
         enabled: true,
       };
       const agent = await prisma.agent.upsert({
-        where: { spaceId_key: { spaceId: null as any, key: tpl.key } },
+        where: { spaceId_key: { spaceId: GLOBAL_SPACE_ID, key: tpl.key } },
         update: { ...data, updatedAt: new Date() },
-        create: { spaceId: null, ...data },
+        create: data,
       });
       created.push(agent);
     }

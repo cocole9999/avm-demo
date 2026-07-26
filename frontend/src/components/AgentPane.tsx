@@ -77,7 +77,7 @@ export function AgentPane() {
 
   // 拉取 Agent 列表
   useEffect(() => {
-    if (!panel.panelOpen || panel.detached) return;
+    if (!panel.panelOpen) return;
     setLoadingAgents(true);
     agentsApi.list()
       .then(list => {
@@ -89,7 +89,7 @@ export function AgentPane() {
       .catch(e => antdMessage.error('加载 Agent 列表失败: ' + (e?.message || '')))
       .finally(() => setLoadingAgents(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel.panelOpen, panel.detached]);
+  }, [panel.panelOpen]);
 
   // 接入 useAgentChat
   const { messages, loading, sendMessage, abort, clear } = useAgentChat({
@@ -98,6 +98,16 @@ export function AgentPane() {
     onSessionCreated: (s: AgentSession) => panel.setSessionId(s.id),
     pageContext,
   });
+
+  // V1.55.4: 处理 InlineAskButton 划词后的 pending prompt
+  const { pendingPrompt, consume } = useAgentPendingPrompt();
+  useEffect(() => {
+    if (pendingPrompt && activeAgent && !loading) {
+      sendMessage(pendingPrompt);
+      consume();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrompt, activeAgent, loading]);
 
   // V1.55.4: 处理 SessionMenu 选中
   const handleSessionSelect = (s: AgentSession) => {
@@ -180,6 +190,13 @@ export function AgentPane() {
           </Tag>
         )}
         <div style={{ flex: 1 }} />
+        {/* V1.55.5: 会话历史菜单 */}
+        <SessionMenu
+          agentId={activeAgent?.id}
+          currentSessionId={panel.sessionId}
+          onSelect={handleSessionSelect}
+          onNew={handleNewSession}
+        />
         {/* V1.55.3: 模型选择器 */}
         <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
         <Tooltip title="清空对话">
