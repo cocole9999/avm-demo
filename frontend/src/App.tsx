@@ -7,7 +7,7 @@ import {
   AppstoreAddOutlined, ScheduleOutlined, StarOutlined, StarFilled,
   ApartmentOutlined, FunctionOutlined, ThunderboltOutlined, ApiOutlined, FileTextOutlined, ToolOutlined, LineChartOutlined, CameraOutlined, ExperimentOutlined, BankOutlined, CarOutlined, ShopOutlined, ProjectOutlined as ProjectIcon, ImportOutlined,
   CheckOutlined, LogoutOutlined, CalendarOutlined, WifiOutlined, DisconnectOutlined,
-  BulbOutlined, BulbFilled,
+  BulbOutlined, BulbFilled, CaretDownOutlined,
 } from '@ant-design/icons';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { iterationApi, metaApi, notificationApi, favoriteApi, spaceApi, aiApi, type SpaceType, type Favorite } from './api';
@@ -27,6 +27,8 @@ export default function App() {
   const CURRENT_USER = user?.username || '';
   const [collapsed, setCollapsed] = useState(false);
   const [iterations, setIterations] = useState<Iteration[]>([]);
+  // V1.55.16: Sider 底部「当前迭代」列表折叠状态（默认折叠，仅显示标题行）
+  const [iterationsExpanded, setIterationsExpanded] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [spaces, setSpaces] = useState<SpaceType[]>([]);
   const [currentSpace, setCurrentSpace] = useState<SpaceType | null>(null);
@@ -525,24 +527,71 @@ export default function App() {
           ]}
         />
 
-        {!collapsed && iterations.length > 0 && (
-          <div style={{ padding: '12px 16px', borderTop: `1px solid ${themeToken.colorBorderSecondary}`, flexShrink: 0, maxHeight: '40%', overflowY: 'auto' }}>
-            <div style={{ fontSize: 12, color: themeToken.colorTextTertiary, marginBottom: 8 }}>
-              <TeamOutlined /> 当前迭代
-            </div>
-            {iterations.filter(i => i.status === 'active').map(i => (
-              <div key={i.id} style={{
-                padding: 8, borderRadius: 6, background: themeToken.colorFillTertiary,
-                marginBottom: 6, fontSize: 13,
-              }}>
-                <div style={{ fontWeight: 500 }}>{i.name}</div>
-                <div style={{ fontSize: 11, color: themeToken.colorTextTertiary, marginTop: 4 }}>
-                  {new Date(i.startDate).toLocaleDateString('zh-CN')} ~ {new Date(i.endDate).toLocaleDateString('zh-CN')}
-                </div>
+        {!collapsed && iterations.length > 0 && (() => {
+          const activeIterations = iterations.filter(i => i.status === 'active');
+          return (
+            <div style={{ borderTop: `1px solid ${themeToken.colorBorderSecondary}`, flexShrink: 0 }}>
+              {/* V1.55.16: 折叠头（默认折叠，点击展开/收起） */}
+              <div
+                onClick={() => setIterationsExpanded(v => !v)}
+                style={{
+                  padding: '10px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 12,
+                  color: themeToken.colorTextTertiary,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = themeToken.colorFillTertiary; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                role="button"
+                aria-expanded={iterationsExpanded}
+                aria-label={iterationsExpanded ? '折叠当前迭代列表' : '展开当前迭代列表'}
+              >
+                <TeamOutlined />
+                <span style={{ flex: 1 }}>当前迭代</span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  minWidth: 18, height: 18, padding: '0 6px', borderRadius: 9,
+                  background: iterationsExpanded ? themeToken.colorPrimaryBg : themeToken.colorFillTertiary,
+                  color: iterationsExpanded ? themeToken.colorPrimary : themeToken.colorTextTertiary,
+                  fontSize: 11, fontWeight: 500,
+                }}>{activeIterations.length}</span>
+                <CaretDownOutlined
+                  style={{
+                    fontSize: 11,
+                    color: themeToken.colorTextTertiary,
+                    transition: 'transform 0.2s',
+                    transform: iterationsExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                  }}
+                />
               </div>
-            ))}
-          </div>
-        )}
+              {/* V1.55.16: 折叠列表（展开时显示，最大 40% 高度 + 内部滚动） */}
+              {iterationsExpanded && (
+                <div style={{ padding: '4px 12px 12px', maxHeight: '40vh', overflowY: 'auto' }}>
+                  {activeIterations.length === 0 ? (
+                    <div style={{ padding: 12, textAlign: 'center', fontSize: 12, color: themeToken.colorTextTertiary }}>
+                      暂无 active 迭代
+                    </div>
+                  ) : activeIterations.map(i => (
+                    <div key={i.id} style={{
+                      padding: 8, borderRadius: 6, background: themeToken.colorFillTertiary,
+                      marginBottom: 6, fontSize: 13,
+                    }}>
+                      <div style={{ fontWeight: 500 }}>{i.name}</div>
+                      <div style={{ fontSize: 11, color: themeToken.colorTextTertiary, marginTop: 4 }}>
+                        {new Date(i.startDate).toLocaleDateString('zh-CN')} ~ {new Date(i.endDate).toLocaleDateString('zh-CN')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         </div>
       </Sider>
 

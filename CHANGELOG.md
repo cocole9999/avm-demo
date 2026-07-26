@@ -2,6 +2,21 @@
 
 AVM 项目中心的所有版本变更记录。本文件遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 规范，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [V1.55.16] - 2026-07-26
+
+### Sider 底部「当前迭代」列表改为可折叠
+
+#### 变更
+- **默认折叠** — 之前常驻展示所有 active 迭代，占用大量 Sider 空间。改为默认仅显示一行折叠头：`👥 当前迭代  [N]  ▼`
+- **点击展开/收起** — 折叠头整行可点击（cursor: pointer + 悬停浅灰背景），箭头图标 200ms 旋转动画（折叠时 -90°，展开时 0°）
+- **数量徽标** — 标题右侧胶囊显示 active 迭代数量：展开时主题色背景，折叠时灰色背景
+- **可访问性** — 折叠头加 `role="button"` + `aria-expanded` + `aria-label` 支持屏幕阅读器
+- **滚动保留** — 展开时仍限 `maxHeight: 40vh + overflowY: auto`，避免撑爆视口
+- **空状态** — 无 active 迭代时显示「暂无 active 迭代」
+
+#### 验证
+- `npx tsc --noEmit` 退出码 0
+
 ## [V1.55.15] - 2026-07-26
 
 ### 标题「AI 助理」→「Agent 助理」
