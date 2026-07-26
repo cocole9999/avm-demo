@@ -606,9 +606,18 @@ export default function App() {
                   />
                 )}
               </Space.Compact>
+              {/* NL 解析中提示 */}
+              {nlMode && nlLoading && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 16 }}>
+                  <Space>
+                    <Spin size="small" />
+                    <span style={{ fontSize: 13, color: '#666' }}>AI 正在解析查询条件…</span>
+                  </Space>
+                </div>
+              )}
               {/* NL 解析结果弹层 */}
               {nlMode && nlResult && (
-                <div style={{ position: 'absolute', top: 40, right: 0, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 12 }}>
+                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 12 }}>
                   <Space direction="vertical" style={{ width: '100%' }} size={6}>
                     <Space size={6}>
                       <Tag color="blue" icon={<RobotOutlined />}>AI 解析</Tag>
@@ -631,24 +640,24 @@ export default function App() {
                   </Space>
                 </div>
               )}
+              {searchResults.length > 0 && !nlMode && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', maxHeight: 480, overflow: 'auto' }}>
+                  <List
+                    size="small"
+                    dataSource={searchResults}
+                    renderItem={(r: any) => (
+                      <List.Item style={{ cursor: 'pointer', padding: '8px 12px' }} onClick={() => { navigate(r.link); setSearchQ(''); setSearchResults([]); }}>
+                        <List.Item.Meta
+                          avatar={<Tag color="blue">{r.type}</Tag>}
+                          title={<span style={{ fontSize: 13 }}>{r.title}</span>}
+                          description={<span style={{ fontSize: 11, color: '#999' }}>{r.subtitle}</span>}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                </div>
+              )}
             </div>
-            {searchResults.length > 0 && !nlMode && (
-              <div style={{ position: 'absolute', top: 56, right: 'max(16px, calc((100vw - 720px) / 2))', zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', maxHeight: 480, overflow: 'auto' }}>
-                <List
-                  size="small"
-                  dataSource={searchResults}
-                  renderItem={(r: any) => (
-                    <List.Item style={{ cursor: 'pointer', padding: '8px 12px' }} onClick={() => { navigate(r.link); setSearchQ(''); setSearchResults([]); }}>
-                      <List.Item.Meta
-                        avatar={<Tag color="blue">{r.type}</Tag>}
-                        title={<span style={{ fontSize: 13 }}>{r.title}</span>}
-                        description={<span style={{ fontSize: 11, color: '#999' }}>{r.subtitle}</span>}
-                      />
-                    </List.Item>
-                  )}
-                />
-              </div>
-            )}
 
             {stats && (
               <div style={{ fontSize: 13, color: themeToken.colorTextSecondary }}>

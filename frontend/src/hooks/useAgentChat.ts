@@ -43,10 +43,17 @@ export function useAgentChat(options: UseAgentChatOptions) {
   const [streaming, setStreaming] = useState('');
   const abortRef = useRef<AbortController | null>(null);
   const currentSessionIdRef = useRef<string | null>(sessionId);
+  // V1.55.8: 标记刚由 ensureSession 创建的 session，避免 useEffect 覆盖正在发送的消息
+  const justCreatedSessionRef = useRef(false);
 
   // V1.55.4: sessionId 变化时加载该会话历史
   useEffect(() => {
     currentSessionIdRef.current = sessionId;
+    // V1.55.8: 如果 session 是由 ensureSession 刚创建的，跳过加载（避免空 session 覆盖正在发送的消息）
+    if (justCreatedSessionRef.current) {
+      justCreatedSessionRef.current = false;
+      return;
+    }
     if (sessionId) {
       agentSessionsApi.get(sessionId)
         .then(s => {
@@ -77,6 +84,8 @@ export function useAgentChat(options: UseAgentChatOptions) {
       metadata: { agentKey: agent.key, page: pageContext },
     });
     currentSessionIdRef.current = s.id;
+    // V1.55.8: 标记为刚创建，让 useEffect 跳过加载
+    justCreatedSessionRef.current = true;
     onSessionCreated?.(s);
     return s.id;
   }, [agent, onSessionCreated, pageContext]);

@@ -306,6 +306,11 @@ aiCommandRouter.post('/command', async (req, res) => {
       } catch { /* 忽略兜底失败 */ }
     }
 
+    // V1.55.8: 如果最终内容仍为空（LLM 返回空回复），给出明确提示
+    if (!finalContent) {
+      finalContent = '（AI 返回了空内容。这可能是模型限制或请求被截断，请尝试重新提问或更换模型。）';
+    }
+
     res.json({
       ok: true,
       command,

@@ -238,10 +238,12 @@ export function AgentPane() {
         alignItems: 'center',
         gap: 8,
         flexShrink: 0,
+        minWidth: 0,
+        overflow: 'hidden',
       }}>
-        <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 16 }} />
-        <span style={{ fontSize: 13, fontWeight: 600 }}>AI 助理</span>
-        {activeAgent && (
+        <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 16, flexShrink: 0 }} />
+        {width >= 320 && <span style={{ fontSize: 13, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }}>AI 助理</span>}
+        {activeAgent && width >= 360 && (
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -251,14 +253,21 @@ export function AgentPane() {
             background: token.colorFillTertiary,
             fontSize: 12,
             fontWeight: 500,
+            flexShrink: 0,
+            maxWidth: 140,
+            overflow: 'hidden',
           }}>
             {agentIconNode(activeAgent.key, activeAgent.icon, 12, true)}
-            <span>{activeAgent.name}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeAgent.name}</span>
           </div>
         )}
-        <div style={{ flex: 1 }} />
-        {/* V1.55.3: 模型选择器 */}
-        <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
+        <div style={{ flex: 1, minWidth: 0 }} />
+        {/* V1.55.3: 模型选择器（窄面板时隐藏） */}
+        {width >= 380 && (
+          <div style={{ flexShrink: 0, minWidth: 0 }}>
+            <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
+          </div>
+        )}
         {/* V1.55.5: 会话历史菜单 */}
         <SessionMenu
           agentId={activeAgent?.id}
