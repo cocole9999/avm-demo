@@ -10,12 +10,13 @@
  * Ctrl+U 切换显示/隐藏
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Spin, Tag, Tooltip, message as antdMessage, theme, Space, Empty } from 'antd';
+import { Button, Input, Spin, Tag, Tooltip, message as antdMessage, theme, Space, Empty, Dropdown } from 'antd';
 import {
   CloseOutlined, FullscreenOutlined, FullscreenExitOutlined,
   SendOutlined, StopOutlined, ClearOutlined, ThunderboltOutlined,
   ReloadOutlined, MessageOutlined, RobotOutlined, BranchesOutlined,
-  ToolOutlined, CodeOutlined,
+  ToolOutlined, CodeOutlined, MoreOutlined,
+  ProjectOutlined, UnorderedListOutlined, SnippetsOutlined, AlertOutlined,
 } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import { useAgentPanel } from './AgentPanelContext';
@@ -30,6 +31,60 @@ import { agentsApi, agentSessionsApi, type Agent as AgentType, type AgentSession
 
 const { useToken } = theme;
 const { TextArea } = Input;
+
+// V1.55.7: 6 个专用 Agent 图标设计（圆形彩色背景 + 居中 antd 图标）
+// 视觉更专业、辨识度更高，与侧边栏导航风格一致
+function agentIconNode(key: string, emoji: string, size: number = 14, badge: boolean = false): React.ReactNode {
+  const map: Record<string, { icon: React.ReactNode; bg: string; color: string; label: string }> = {
+    general:  { icon: <RobotOutlined />,         bg: '#e6f4ff', color: '#1677ff', label: '通用' },  // 通用 - 机器人蓝
+    project:  { icon: <ProjectOutlined />,       bg: '#e6fffb', color: '#13c2c2', label: '项目' },  // 项目 - 项目青
+    workItem: { icon: <UnorderedListOutlined />, bg: '#fff7e6', color: '#fa8c16', label: '工作项' }, // 工作项 - 列表橙
+    report:   { icon: <SnippetsOutlined />,      bg: '#f9f0ff', color: '#722ed1', label: '报告' },  // 报告 - 报告紫
+    risk:     { icon: <AlertOutlined />,         bg: '#fff1f0', color: '#f5222d', label: '风险' },  // 风险 - 警告红
+    review:   { icon: <MessageOutlined />,       bg: '#f6ffed', color: '#52c41a', label: '评审' },  // 评审 - 消息绿
+  };
+  const item = map[key] || { icon: <RobotOutlined />, bg: '#e6f4ff', color: '#1677ff', label: 'Agent' };
+  if (badge) {
+    // 完整徽章：圆形彩色背景 + 居中图标（用于 Tab/顶部/空状态）
+    return (
+      <span
+        title={emoji || item.label}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: size + 8,
+          height: size + 8,
+          borderRadius: '50%',
+          background: item.bg,
+          color: item.color,
+          fontSize: size,
+          lineHeight: 1,
+          flexShrink: 0,
+        }}
+      >
+        {item.icon}
+      </span>
+    );
+  }
+  // 紧凑型：仅图标（用于按钮内）
+  return (
+    <span
+      title={emoji || item.label}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: item.color,
+        fontSize: size,
+        lineHeight: 1,
+        verticalAlign: 'middle',
+      }}
+    >
+      {item.icon}
+    </span>
+  );
+}
 
 function pageNameFromPath(path: string): string {
   if (!path) return '首页';
@@ -164,6 +219,7 @@ export function AgentPane() {
     <div style={{
       width: panel.detached ? 'min(720px, 90vw)' : width,
       height: panel.detached ? 'min(80vh, 720px)' : '100%',
+      maxHeight: '100%',
       display: 'flex',
       flexDirection: 'column',
       background: token.colorBgContainer,
@@ -171,25 +227,38 @@ export function AgentPane() {
       borderRadius: panel.detached ? 12 : 0,
       boxShadow: panel.detached ? '0 12px 40px rgba(0,0,0,0.18)' : 'none',
       overflow: 'hidden',
+      minHeight: 0,
     }}>
-      {/* 顶部：标题 + 工具 */}
+      {/* 顶部：标题 + 工具（一行紧凑布局） */}
       <div style={{
-        padding: '10px 12px',
+        padding: '8px 10px',
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
         background: token.colorBgLayout,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        flexWrap: 'wrap',
+        flexShrink: 0,
       }}>
         <ThunderboltOutlined style={{ color: token.colorPrimary, fontSize: 16 }} />
         <span style={{ fontSize: 13, fontWeight: 600 }}>AI 助理</span>
         {activeAgent && (
-          <Tag color="blue" style={{ marginLeft: 4 }}>
-            {activeAgent.icon} {activeAgent.name}
-          </Tag>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '2px 8px 2px 2px',
+            borderRadius: 12,
+            background: token.colorFillTertiary,
+            fontSize: 12,
+            fontWeight: 500,
+          }}>
+            {agentIconNode(activeAgent.key, activeAgent.icon, 12, true)}
+            <span>{activeAgent.name}</span>
+          </div>
         )}
         <div style={{ flex: 1 }} />
+        {/* V1.55.3: 模型选择器 */}
+        <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
         {/* V1.55.5: 会话历史菜单 */}
         <SessionMenu
           agentId={activeAgent?.id}
@@ -197,28 +266,27 @@ export function AgentPane() {
           onSelect={handleSessionSelect}
           onNew={handleNewSession}
         />
-        {/* V1.55.3: 模型选择器 */}
-        <ModelSelector value={selectedModel} onChange={(p, m) => setSelectedModel({ provider: p, model: m })} />
         <Tooltip title="清空对话">
           <Button type="text" size="small" icon={<ClearOutlined />} onClick={() => { clear(); panel.setSessionId(null); }} disabled={messages.length === 0} />
         </Tooltip>
-        <Tooltip title="刷新 Agent 列表">
-          <Button type="text" size="small" icon={<ReloadOutlined />} onClick={() => {
-            setLoadingAgents(true);
-            agentsApi.list().then(setAgents).finally(() => setLoadingAgents(false));
-          }} />
-        </Tooltip>
-        <Tooltip title={panel.detached ? '嵌入页面' : '分离浮窗'}>
-          <Button
-            type="text"
-            size="small"
-            icon={panel.detached ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-            onClick={panel.toggleDetached}
-          />
-        </Tooltip>
-        <Tooltip title="关闭 (Ctrl+U)">
-          <Button type="text" size="small" icon={<CloseOutlined />} onClick={panel.closePanel} />
-        </Tooltip>
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: [
+              { key: 'refresh', icon: <ReloadOutlined />, label: '刷新 Agent 列表', onClick: () => {
+                setLoadingAgents(true);
+                agentsApi.list().then(setAgents).finally(() => setLoadingAgents(false));
+              } },
+              { key: 'detach', icon: panel.detached ? <FullscreenExitOutlined /> : <FullscreenOutlined />, label: panel.detached ? '嵌入页面' : '分离浮窗', onClick: panel.toggleDetached },
+              { type: 'divider' as const },
+              { key: 'close', icon: <CloseOutlined />, label: '关闭面板 (Ctrl+U)', onClick: panel.closePanel, danger: true },
+            ],
+          }}
+        >
+          <Tooltip title="更多">
+            <Button type="text" size="small" icon={<MoreOutlined />} />
+          </Tooltip>
+        </Dropdown>
       </div>
 
       {/* Agent 切换 Tab */}
@@ -238,9 +306,10 @@ export function AgentPane() {
                 size="small"
                 type={panel.activeAgentKey === a.key ? 'primary' : 'default'}
                 onClick={() => panel.setActiveAgentKey(a.key)}
-                style={{ flexShrink: 0 }}
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}
               >
-                <span style={{ marginRight: 4 }}>{a.icon}</span>{a.name}
+                {agentIconNode(a.key, a.icon, 13, true)}
+                <span>{a.name}</span>
               </Button>
             </Tooltip>
           ))
@@ -256,7 +325,10 @@ export function AgentPane() {
             color: token.colorTextTertiary, fontSize: 13, textAlign: 'center',
           }}>
             <RobotOutlined style={{ fontSize: 32, marginBottom: 12, color: token.colorPrimary }} />
-            <div style={{ marginBottom: 4 }}>{activeAgent ? activeAgent.name : 'AI 助理'}</div>
+            <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {activeAgent && agentIconNode(activeAgent.key, activeAgent.icon, 18, true)}
+              <span style={{ fontSize: 14, fontWeight: 500 }}>{activeAgent ? activeAgent.name : 'AI 助理'}</span>
+            </div>
             <div style={{ fontSize: 12, color: token.colorTextQuaternary, maxWidth: 280, lineHeight: 1.6 }}>
               {activeAgent?.description || '选择 Agent 后开始对话'}
             </div>
@@ -343,18 +415,31 @@ export function AgentPane() {
         padding: 12,
         borderTop: `1px solid ${token.colorBorderSecondary}`,
         background: token.colorBgContainer,
+        flexShrink: 0,
+        flexGrow: 0,
+        boxShadow: `0 -2px 8px ${token.colorBorderSecondary}40`,
       }}>
-        <TextArea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={activeAgent ? `向 ${activeAgent.name} 提问...` : '请先选择 Agent'}
-          autoSize={{ minRows: 2, maxRows: 6 }}
-          disabled={!activeAgent || loading}
-        />
+        <div style={{
+          border: `1.5px solid ${token.colorBorderSecondary}`,
+          borderRadius: 10,
+          padding: 2,
+          background: token.colorBgContainer,
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+        }}>
+          <TextArea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={activeAgent ? `向 ${activeAgent.name} 提问...` : '请先选择 Agent'}
+            autoSize={{ minRows: 2, maxRows: 6 }}
+            disabled={!activeAgent || loading}
+            variant="borderless"
+            style={{ padding: '6px 8px', fontSize: 13, resize: 'none' }}
+          />
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
           <span style={{ fontSize: 11, color: token.colorTextTertiary, flex: 1 }}>
-            {activeAgent ? `${activeAgent.allowedTools?.length || 0} 个工具可用` : ''}
+            {activeAgent ? `${activeAgent.allowedTools?.length || 0} 个工具可用 · Enter 发送 · Shift+Enter 换行` : '请先选择 Agent'}
           </span>
           {loading ? (
             <Button
@@ -419,7 +504,7 @@ export function AgentPane() {
   return (
     <>
       {resizeHandle}
-      <aside data-agent-pane="true" style={{ display: 'flex', height: '100%' }} role="complementary" aria-label="AI 助理面板">
+      <aside data-agent-pane="true" style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0, height: '100%' }} role="complementary" aria-label="AI 助理面板">
         {paneContent}
       </aside>
     </>
