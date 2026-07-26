@@ -458,7 +458,7 @@ export function WorkItemsPage() {
                 allowClear
                 placeholder="选择"
                 options={['张三', '李四', '王五', '赵六', '钱七', '孙八', '周九'].map(p => ({ value: p }))}
-                dropdownRender={(menu) => (
+                popupRender={(menu) => (
                   <>
                     {menu}
                     <div style={{ padding: 4, borderTop: '1px solid #f0f0f0' }}>

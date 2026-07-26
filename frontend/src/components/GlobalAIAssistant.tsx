@@ -911,7 +911,7 @@ export function GlobalAIAssistant() {
                     options={modelDropdownItems}
                     styles={{ popup: { root: { minWidth: 240, maxHeight: 400, overflowY: 'auto' } } }}
                     optionLabelProp="label"
-                    dropdownRender={(menu) => (
+                    popupRender={(menu) => (
                       <>
                         {menu}
                         <Divider style={{ margin: '4px 0' }} />
@@ -1011,7 +1011,7 @@ function renderProviderLogo(providerKey: string, fallbackEmoji: string | undefin
   return <span style={{ fontSize: size }}>{fallbackEmoji || '🔘'}</span>;
 }
 
-// 构建模型下拉选项（V1.47：只显示已配置厂商及其所有模型；"添加模型"按钮通过 dropdownRender 渲染以保证可点击）
+// 构建模型下拉选项（V1.47：只显示已配置厂商及其所有模型；"添加模型"按钮通过 popupRender 渲染以保证可点击）
 function useMemoModelDropdown(
   providers: ProviderMeta[],
   activeKeys: Set<string>,

@@ -573,7 +573,7 @@ export default function App() {
           <Space size={16} style={{ flex: 1, justifyContent: 'flex-end' }}>
             {/* V1.50: 全局搜索（关键词 + NL 双模式） */}
             <div style={{ position: 'relative', width: 'clamp(180px, 30vw, 320px)' }}>
-              <Input.Group compact>
+              <Space.Compact>
                 <Tooltip title={nlMode ? '切换到关键词搜索' : '切换到 AI 自然语言搜索（如「上周延期项目」）'}>
                   <Button
                     size="middle"
@@ -603,7 +603,7 @@ export default function App() {
                     allowClear
                   />
                 )}
-              </Input.Group>
+              </Space.Compact>
               {/* NL 解析结果弹层 */}
               {nlMode && nlResult && (
                 <div style={{ position: 'absolute', top: 40, right: 0, zIndex: 1000, background: '#fff', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', width: 'min(480px, calc(100vw - 32px))', padding: 12 }}>
