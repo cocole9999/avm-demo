@@ -79,7 +79,7 @@ export function MessageFeedbackBar({ sessionId, messageId }: Props) {
         await agentFeedbackApi.remove(myFeedbackId);
         setMyRating(null);
         setMyFeedbackId(null);
-        setMyComment('');
+        setComment('');
         setUp(u => Math.max(0, u - 1));
         antdMessage.success('已取消反馈');
       } catch (e: any) {
